@@ -1,10 +1,17 @@
 """Validate a scenario by running assertions against the live cluster."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import List
 
 from cka_sim.cluster import run_shell
+
+# Controllers need a moment to reconcile (endpoints after a selector fix,
+# availableReplicas mid-rollout, .status.succeeded on a Job...). Retry failed
+# run-assertions briefly before reporting FAIL. File assertions: no retry.
+SETTLE_ATTEMPTS = 4
+SETTLE_SLEEP = 3
 
 
 @dataclass
@@ -22,7 +29,20 @@ def evaluate(assertion: dict) -> AssertionResult:
     and one expectation:
       - contains: <substring>
       - equals: <exact value>
+
+    Empty values are retried a few times (controllers need a moment to
+    populate status/endpoints); non-empty wrong values fail immediately.
     """
+    result = None
+    for _ in range(SETTLE_ATTEMPTS):
+        result = _evaluate_once(assertion)
+        if result.passed or "file" in assertion:
+            return result
+        time.sleep(SETTLE_SLEEP)
+    return result
+
+
+def _evaluate_once(assertion: dict) -> AssertionResult:
     if "run" in assertion:
         cp = run_shell(assertion["run"])
         value = (cp.stdout or "").strip()

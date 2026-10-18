@@ -82,8 +82,50 @@ def _score_of(scenario: Scenario, hints_used: int) -> float:
 def _setup(scenario: Scenario, backend: ClusterBackend) -> None:
     sp = scenario.setup_fullpath
     if sp and os.path.exists(sp):
-        ui.info(f"[setup] applying {os.path.basename(sp)} ...")
+        ui.info(f"[setup] resetting + applying {os.path.basename(sp)} ...")
+        # Delete first: kubectl apply alone NEVER reverts out-of-band patches
+        # (kubectl patch/edit/set image don't update last-applied-configuration),
+        # so a previously "solved" bug would survive and break the scenario
+        # premise on re-runs of the persistent kind cluster.
+        run_shell(
+            f"kubectl delete -f {sp} --ignore-not-found --wait=true --timeout=30s",
+            timeout=60,
+        )
+        _wait_namespaces_gone(sp)
         backend.apply_file(sp)
+
+
+def _wait_namespaces_gone(setup_path: str, timeout_s: int = 30) -> None:
+    """Block until every namespace declared in setup.yaml is fully gone."""
+    import time
+
+    import yaml as _yaml
+
+    try:
+        with open(setup_path) as fh:
+            docs = [d for d in _yaml.safe_load_all(fh) if d]
+    except (OSError, _yaml.YAMLError):
+        return
+    namespaces = [
+        d["metadata"]["name"]
+        for d in docs
+        if d.get("kind") == "Namespace" and d.get("metadata", {}).get("name")
+    ]
+    deadline = time.monotonic() + timeout_s
+    pending = list(namespaces)
+    while pending and time.monotonic() < deadline:
+        still = []
+        for ns in pending:
+            cp = run_shell(
+                f"kubectl get ns {ns} --no-headers -o name 2>/dev/null", timeout=10
+            )
+            if cp.stdout.strip():
+                still.append(ns)
+        pending = still
+        if pending:
+            time.sleep(1)
+    if pending:
+        ui.warn(f"[setup] namespace(s) still terminating: {', '.join(pending)}")
 
 
 def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Optional[Timer] = None) -> ScenarioResult:
