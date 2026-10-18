@@ -33,8 +33,34 @@ pip3 install -q -r requirements.txt || pip install -q -r requirements.txt
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
   echo "Cluster '${CLUSTER_NAME}' already exists."
 else
-  echo "Creating multi-node cluster '${CLUSTER_NAME}' (1 control-plane + 2 workers)..."
-  cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
+  if [ "${CKA_SIM_INGRESS:-0}" = "1" ]; then
+    echo "Creating cluster '${CLUSTER_NAME}' with host ports 80/443 mapped (ingress-ready)..."
+    cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        node-labels: "ingress-ready=true"
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+    listenAddress: "0.0.0.0"
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+    listenAddress: "0.0.0.0"
+- role: worker
+- role: worker
+EOF
+  else
+    echo "Creating multi-node cluster '${CLUSTER_NAME}' (1 control-plane + 2 workers)..."
+    cat <<EOF | kind create cluster --name "${CLUSTER_NAME}" --config=-
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -42,6 +68,7 @@ nodes:
 - role: worker
 - role: worker
 EOF
+  fi
 fi
 
 echo "Waiting for nodes to be Ready..."

@@ -42,6 +42,25 @@ Le dossier `cka-ai-lab/` est un scénario Killercoda complet (`index.json`, step
    ```
 4. Sur killercoda.com → ton profil listera le scénario *CKA Trainer Lab*.
 
+## Page web publique via Ingress (ports 80/443)
+
+Killercoda ne donne pas d'IP publique directe : il **route le trafic HTTP (80/443)**
+vers la VM via une URL proxy, visible dans l'onglet **« Traffic »** du scénario.
+
+Le bootstrap crée le cluster avec `CKA_SIM_INGRESS=1` → ports 80/443 mappés sur le
+control-plane. Pour publier une page web de démo (ingress-nginx + podinfo) :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/packbo/cka-ckad-cks-prep/main/killercoda/ingress-demo.sh | bash
+```
+
+En local (⚠ recrée le cluster) :
+
+```bash
+cd cka-sim && ./run.sh down
+CKA_SIM_INGRESS=1 bash install.sh && bash ../killercoda/ingress-demo.sh
+```
+
 ## Utiliser l'IA comme examinateur (sur le playground)
 
 ```bash

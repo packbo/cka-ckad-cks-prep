@@ -31,6 +31,8 @@ else
 fi
 
 # 4. kind cluster + python deps (logs in $LOG)
+# CKA_SIM_INGRESS=1 : ports 80/443 mappés vers le control-plane → page web publique via Ingress
+export CKA_SIM_INGRESS="${CKA_SIM_INGRESS:-1}"
 log "running cka-sim install (2-4 min) — log: $LOG"
 bash "$REPO_DIR/cka-sim/install.sh" >>"$LOG" 2>&1 || {
   echo "[cka-prep] install reported an issue — inspect $LOG"; exit 0; }
