@@ -50,5 +50,116 @@
       "how": "kubectl get secret X -o jsonpath='{.data.key}' | base64 -d",
       "note": "Secrets store values base64-encoded in .data."
     }
+  ],
+  "setup_once": [
+    "# ── à coller UNE fois au début de l'examen (réflexe ~30 s) ──",
+    "alias k=kubectl",
+    "complete -F __start_kubectl k          # autocomplétion sur k aussi",
+    "export do=\"--dry-run=client -o yaml\"   # k run nginx --image=nginx $do > pod.yaml",
+    "export now=\"--force --grace-period=0\"  # k delete pod x $now",
+    "echo 'set tabstop=2 shiftwidth=2 expandtab' >> ~/.vimrc",
+    "kubectl config set-context --current --namespace=<ns>   # bascule ns pour TOUTE la session",
+    "# dans cka-sim : k/kgp/kgs/kgd/kgn/kd/kaf/kex/klog + $do/$now sont DÉJÀ actifs (auto-expansés)"
+  ],
+  "jq": [
+    {
+      "need": "Tous les chemins feuilles d'un objet (LA méthode de découverte)",
+      "how": "kubectl get deploy web -o json | jq -r 'paths(scalars)|join(\".\")' | grep -i image",
+      "note": "Convertir ensuite a.b → -o jsonpath='{.a.b}'. Marche pour TOUTE ressource."
+    },
+    {
+      "need": "Liste ou objet simple ?",
+      "how": "kubectl get pods -o json | jq 'keys'   # 'items' présent → liste",
+      "note": "Liste → .items[]. Objet seul (get pod X) → pas de .items."
+    },
+    {
+      "need": "Extraire un champ de tous les items",
+      "how": "kubectl get pods -A -o json | jq -r '.items[].metadata.name'",
+      "note": "-r pour la valeur brute sans guillemets."
+    },
+    {
+      "need": "Filtrer (l'équivalent jq du WHERE)",
+      "how": "jq -r '.items[] | select(.status.phase==\"Running\") | .metadata.name'",
+      "note": "select() enchaîne : select(a) | select(b) = ET logique."
+    },
+    {
+      "need": "Chercher un champ partout dans l'arbre",
+      "how": "kubectl get pod X -o json | jq -r '.. | .image? // empty' | sort -u",
+      "note": ".. = récursif. sort -u dédoublonne."
+    },
+    {
+      "need": "Compter",
+      "how": "jq '.items | length'    /    jq '.spec.containers | length'",
+      "note": "Nombre de pods listés, de conteneurs, de rules RBAC…"
+    },
+    {
+      "need": "Afficher proprement un bout de spec",
+      "how": "jq '.spec.template.spec'   ou   jq -C '.status'   (couleurs)",
+      "note": "Plus lisible que -o yaml quand on cherche la structure."
+    }
+  ],
+  "jsonpath": [
+    {
+      "need": "Les 2 réflexes de base",
+      "how": "kubectl get pods (LISTE) → {.items[*].x}   |   kubectl get pod X (SEUL) → {.x}",
+      "note": "Erreur #1 de l'examen : .items[*] sur un objet seul, ou l'inverse."
+    },
+    {
+      "need": "Retour à la ligne (jsonpath n'ajoute JAMAIS de \\n)",
+      "how": "-o jsonpath='{.status.phase}{\"\\n\"}'   ou simplement | jq -r",
+      "note": "Sinon le prompt reste collé à la sortie."
+    },
+    {
+      "need": "Boucler proprement sur plusieurs conteneurs",
+      "how": "-o jsonpath='{range .spec.containers[*]}{.name}={.image}{\"\\n\"}{end}'",
+      "note": "range/end = le for du jsonpath. Bien plus lisible que [*] brut."
+    },
+    {
+      "need": "JSONPath kubectl NE filtre PAS (?(@==) interdit)",
+      "how": "--field-selector=status.phase=Running   ou bascule sur jq select()",
+      "note": "Les filtres ?() existent en jsonpath standard, PAS dans celui de kubectl."
+    },
+    {
+      "need": "Chemins à connaître par cœur",
+      "how": "image d'un Deploy → {.spec.template.spec.containers[0].image} ; node d'un pod → {.spec.nodeName}",
+      "note": "Deploy/STS/DS/Job = template. Seul un Pod a .spec.containers direct."
+    },
+    {
+      "need": "Décoder un Secret",
+      "how": "kubectl get secret X -o jsonpath='{.data.key}' | base64 -d ; echo",
+      "note": "; echo car base64 -d ne termine pas par \\n non plus."
+    }
+  ],
+  "kubectl_speed": [
+    {
+      "need": "Générer du YAML, jamais l'écrire à la main",
+      "how": "k run nginx --image=nginx $do > p.yaml   |   k create deploy d --image=nginx --replicas=3 $do",
+      "note": "Aussi : create job/cronjob/cm/secret/sa + expose ... --type=NodePort --port=80 --target-port=80"
+    },
+    {
+      "need": "Patcher en one-liner (sans éditeur)",
+      "how": "kubectl patch deploy x -p '{\"spec\":{\"replicas\":5}}'",
+      "note": "Plus rapide que k edit quand on connaît le champ."
+    },
+    {
+      "need": "Changer une image",
+      "how": "kubectl set image deploy/web container=nginx:1.21",
+      "note": "Puis kubectl rollout status deploy/web"
+    },
+    {
+      "need": "Remplacer un objet existant",
+      "how": "kubectl replace --force -f x.yaml",
+      "note": "Évite delete+apply. --force casse l'objet et le recrée."
+    },
+    {
+      "need": "Supprimer vite (dev/exam)",
+      "how": "kubectl delete pod x $now    # --force --grace-period=0",
+      "note": "Jamais en prod, précieux à l'examen."
+    },
+    {
+      "need": "Vérifications éclair",
+      "how": "k get all -A  |  k get events --sort-by=.metadata.creationTimestamp  |  k get pods -o wide",
+      "note": "+ k config current-context AVANT chaque question (piège #1 des multi-cluster)."
+    }
   ]
 }

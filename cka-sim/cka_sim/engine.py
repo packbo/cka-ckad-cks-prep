@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import yaml
 
-from cka_sim import completion, ui
+from cka_sim import cheatsheet, completion, ui
 from cka_sim.cluster import ClusterBackend, run_shell
 from cka_sim.hints import PENALTY, show_hint
 from cka_sim.paths import SCENARIOS_DIR
@@ -94,7 +94,7 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
 
     _setup(scenario, backend)
     ui.question(scenario.question)
-    ui.info("meta-commands:  :hint <1-4>   :check   :solution   :skip")
+    ui.info("meta-commands:  :hint <1-4>   :check   :cheat [jq|jsonpath|...]   :solution   :skip")
     print()
 
     hints_used = 0
@@ -126,6 +126,8 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
                     return ScenarioResult(scenario, True, score, hints_used)
                 else:
                     ui.warn("not all checks passed yet — keep going")
+            elif cmd == ":cheat" or cmd == ":cheatsheet":
+                cheatsheet.show(parts[1] if len(parts) > 1 else None)
             elif cmd == ":solution":
                 show_hint(scenario, 4, ui)
                 return ScenarioResult(scenario, False, 0.0, 4)
