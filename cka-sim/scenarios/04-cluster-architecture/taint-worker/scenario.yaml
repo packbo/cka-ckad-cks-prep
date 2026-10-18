@@ -1,0 +1,26 @@
+id: taint-worker
+title: "Taint a worker node"
+domain: cluster-architecture
+weight: 3
+difficulty: easy
+time_estimate: 150
+question: |
+  Find the FIRST worker node of the cluster and add the taint
+  `workload=test:NoSchedule` to it.
+
+  (No pod is required — only the node state is graded.)
+hints:
+  - level: 1
+    text: "List nodes first: kubectl get nodes . Tainting uses kubectl taint nodes <node> key=value:Effect"
+  - level: 2
+    text: "kubectl explain node.spec.taints --recursive . Effect must be exactly NoSchedule (not NoExecute, not PreferNoSchedule)."
+  - level: 3
+    text: "Pitfall: the effect goes after a colon: workload=test:NoSchedule . Verify: kubectl describe node <worker> | grep -i taint"
+  - level: solution
+    text: "kubectl taint node cka-sim-worker workload=test:NoSchedule"
+check:
+  assertions:
+    - run: "kubectl get node cka-sim-worker -o jsonpath='{.spec.taints[*].key}'"
+      contains: "workload"
+    - run: "kubectl get node cka-sim-worker -o jsonpath='{.spec.taints[*].effect}'"
+      contains: "NoSchedule"

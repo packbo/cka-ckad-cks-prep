@@ -1,0 +1,31 @@
+id: env-configmap
+title: "Inject a ConfigMap value as env var"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad2`:
+
+  1. Create a ConfigMap `app-config` from the literal `DB_HOST=postgres`.
+  2. Create Pod `web` (image `nginx:1.21`) whose container gets an env var
+     `DB_HOST` populated from ConfigMap key `DB_HOST` (valueFrom/configMapKeyRef).
+hints:
+  - level: 1
+    text: "Step 1 has a generator (kubectl create configmap --from-literal). Step 2 needs YAML: generate with $do then edit the env block."
+  - level: 2
+    text: "kubectl explain pod.spec.containers.env.valueFrom.configMapKeyRef --recursive . The pod env needs name, key AND (good practice) the configMap name."
+  - level: 3
+    text: "Pitfall: key must exist in the cm or the container stays in CreateContainerConfigError. Verify: kubectl exec web -n ckad2 -- env | grep DB_HOST"
+  - level: solution
+    text: "kubectl create cm app-config --from-literal=DB_HOST=postgres -n ckad2 ; pod yaml env: [{name: DB_HOST, valueFrom: {configMapKeyRef: {name: app-config, key: DB_HOST}}}]"
+check:
+  assertions:
+    - run: "kubectl get cm app-config -n ckad2 -o jsonpath='{.data.DB_HOST}'"
+      equals: "postgres"
+    - run: "kubectl get pod web -n ckad2 -o jsonpath='{.spec.containers[0].env[0].valueFrom.configMapKeyRef.name}'"
+      equals: "app-config"
+    - run: "kubectl get pod web -n ckad2 -o jsonpath='{.spec.containers[0].env[0].name}'"
+      equals: "DB_HOST"

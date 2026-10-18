@@ -1,0 +1,32 @@
+id: ingress-path
+title: "Create an Ingress resource"
+domain: services-networking
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  Namespace `ckad-net` already runs Deployment + Service `shop` (port 80).
+
+  Create an Ingress named `shop-ingress` in `ckad-net`:
+
+  - ingressClassName `nginx`
+  - host `shop.local`, path `/` (Prefix) → Service `shop` port 80
+hints:
+  - level: 1
+    text: "No generator: kubernetes.io → 'ingress' → the concept page has a copy-paste manifest. Rewrite it for this case."
+  - level: 2
+    text: "Fields: spec.ingressClassName, spec.rules[0].host, rules[0].http.paths[0].backend.service.{name,port.number}. Check yours: kubectl explain ingress.spec --recursive | head -40"
+  - level: 3
+    text: "Note: kind has NO ingress controller by default — the exam only grades the object. Verify the shape: kubectl get ingress shop-ingress -n ckad-net -o yaml"
+  - level: solution
+    text: "YAML: {apiVersion: networking.k8s.io/v1, kind: Ingress, metadata: {name: shop-ingress, namespace: ckad-net}, spec: {ingressClassName: nginx, rules: [{host: shop.local, http: {paths: [{path: /, pathType: Prefix, backend: {service: {name: shop, port: {number: 80}}}}]}}]}}"
+check:
+  assertions:
+    - run: "kubectl get ingress shop-ingress -n ckad-net -o jsonpath='{.spec.rules[0].host}'"
+      equals: "shop.local"
+    - run: "kubectl get ingress shop-ingress -n ckad-net -o jsonpath='{.spec.ingressClassName}'"
+      equals: "nginx"
+    - run: "kubectl get ingress shop-ingress -n ckad-net -o jsonpath='{.spec.rules[0].http.paths[0].backend.service.name}'"
+      equals: "shop"

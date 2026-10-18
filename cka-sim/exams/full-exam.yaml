@@ -10,3 +10,10 @@ scenarios:
   - network-policy
   - extract-image-deploy
   - etcd-backup
+  - cronjob-every-2min
+  - env-configmap
+  - rolling-strategy
+  - ingress-path
+  - netpol-default-deny
+  - taint-worker
+  - security-context

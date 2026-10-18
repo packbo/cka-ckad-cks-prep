@@ -1,0 +1,28 @@
+id: resources-limits
+title: "Set requests and limits"
+domain: workloads
+weight: 2
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad2`, create Pod `sized` (image `nginx:1.21`, container `web`) with:
+
+  - requests: cpu `50m`, memory `64Mi`
+  - limits: cpu `100m`, memory `128Mi`
+hints:
+  - level: 1
+    text: "kubectl run has --requests and --limits flags — no YAML needed."
+  - level: 2
+    text: "kubectl run sized --image=nginx:1.21 -n ckad2 --requests='cpu=50m,memory=64Mi' --limits='cpu=100m,memory=128Mi'"
+  - level: 3
+    text: "Verify with: kubectl get pod sized -n ckad2 -o jsonpath='{.spec.containers[0].resources}' . QoS becomes Burstable."
+  - level: solution
+    text: "kubectl run sized --image=nginx:1.21 -n ckad2 --requests='cpu=50m,memory=64Mi' --limits='cpu=100m,memory=128Mi'"
+check:
+  assertions:
+    - run: "kubectl get pod sized -n ckad2 -o jsonpath='{.spec.containers[0].resources.requests.cpu}'"
+      equals: "50m"
+    - run: "kubectl get pod sized -n ckad2 -o jsonpath='{.spec.containers[0].resources.limits.memory}'"
+      equals: "128Mi"

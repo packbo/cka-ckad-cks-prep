@@ -1,0 +1,30 @@
+id: netpol-default-deny
+title: "Default-deny Ingress NetworkPolicy"
+domain: services-networking
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `np-test`, create a NetworkPolicy named `default-deny` that denies
+  ALL incoming traffic to EVERY pod of the namespace (default-deny Ingress).
+
+  Do NOT restrict Egress.
+hints:
+  - level: 1
+    text: "A default-deny selects all pods with an EMPTY podSelector. NetworkPolicies are deny-by-exception: listing no 'from' sources denies everyone."
+  - level: 2
+    text: "kubernetes.io → 'network policies' → the concept page ships a default-deny example. Copy it, adapt namespace/name."
+  - level: 3
+    text: "Watch out: policyTypes must be [Ingress] only — adding Egress would also block outgoing traffic. Verify: kubectl get netpol default-deny -n np-test -o yaml"
+  - level: solution
+    text: "YAML: {apiVersion: networking.k8s.io/v1, kind: NetworkPolicy, metadata: {name: default-deny, namespace: np-test}, spec: {podSelector: {}, policyTypes: [Ingress]}}"
+check:
+  assertions:
+    - run: "kubectl get netpol default-deny -n np-test -o jsonpath='{.spec.podSelector}'"
+      contains: "{}"
+    - run: "kubectl get netpol default-deny -n np-test -o jsonpath='{.spec.policyTypes[0]}'"
+      equals: "Ingress"
+    - run: "kubectl get netpol default-deny -n np-test -o jsonpath='{.spec.ingress}'"
+      equals: "[]"

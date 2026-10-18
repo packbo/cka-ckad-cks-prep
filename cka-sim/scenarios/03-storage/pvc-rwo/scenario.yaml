@@ -1,0 +1,33 @@
+id: pvc-rwo
+title: "PVC (ReadWriteOnce) mounted by a Pod"
+domain: storage
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad-st`:
+
+  1. Create a PersistentVolumeClaim `data`, accessMode `ReadWriteOnce`, size `10Mi`.
+  2. Create Pod `writer` (image `busybox:1.36`, command `sleep 3600`) mounting the
+     PVC at `/data`.
+
+  The PVC must reach `Bound`.
+hints:
+  - level: 1
+    text: "No generator for PVC: copy the manifest from kubernetes.io (search 'persistent volume claim')."
+  - level: 2
+    text: "kind ships a default StorageClass (standard) with WaitForFirstConsumer binding: the PVC stays Pending until the pod mounts it. Don't panic — write both, then watch."
+  - level: 3
+    text: "Pitfall: apiVersion v1, kind PersistentVolumeClaim. Check events if stuck: kubectl describe pvc data -n ckad-st"
+  - level: solution
+    text: "PVC yaml: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: data, namespace: ckad-st}, spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 10Mi}}}} + pod volumes:[{name: data, persistentVolumeClaim:{claimName: data}}] mountPath /data"
+check:
+  assertions:
+    - run: "kubectl get pvc data -n ckad-st -o jsonpath='{.status.phase}'"
+      equals: "Bound"
+    - run: "kubectl get pod writer -n ckad-st -o jsonpath='{.spec.containers[0].volumeMounts[0].mountPath}'"
+      equals: "/data"
+    - run: "kubectl get pod writer -n ckad-st -o jsonpath='{.spec.volumes[0].persistentVolumeClaim.claimName}'"
+      equals: "data"

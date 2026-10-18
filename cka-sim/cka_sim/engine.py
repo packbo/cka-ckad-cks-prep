@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import yaml
 
-from cka_sim import ui
+from cka_sim import completion, ui
 from cka_sim.cluster import ClusterBackend, run_shell
 from cka_sim.hints import PENALTY, show_hint
 from cka_sim.paths import SCENARIOS_DIR
@@ -98,6 +98,7 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
     print()
 
     hints_used = 0
+    completion.setup()
     while True:
         try:
             raw = input(ui.prompt()).strip()
@@ -134,7 +135,10 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
                 ui.warn(f"unknown meta-command: {cmd}")
             continue
 
-        cp = run_shell(raw)
+        expanded = completion.expand_command(raw)
+        if expanded != raw:
+            ui.info(f"→ {expanded}")
+        cp = run_shell(expanded)
         if cp.stdout:
             ui.out(cp.stdout.rstrip())
         if cp.stderr:

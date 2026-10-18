@@ -1,0 +1,32 @@
+id: sidecar-logging
+title: "Multi-container Pod: logging sidecar"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create a Pod named `logger` with TWO containers:
+
+  - `web`: image `nginx:1.21`, serving on 80
+  - `logsidecar`: image `busybox:1.36`, command `sh -c "tail -f /var/log/nginx/access.log"`
+
+  Both must share an `emptyDir` volume `logdir` mounted at `/var/log/nginx`.
+hints:
+  - level: 1
+    text: "Pods with multiple containers are written as YAML: kubectl run $do to get a base, then add the sidecar and the shared volume."
+  - level: 2
+    text: "kubectl run logger --image=nginx:1.21 -n ckad $do > pod.yaml , then edit: add containers[1], volumes[0].emptyDir and the two volumeMounts. kubectl explain pod.spec --recursive | grep -A2 volumeMounts"
+  - level: 3
+    text: "Pitfall: both containers need their own volumeMounts entry for the SAME volume name. Apply with kubectl apply -f pod.yaml"
+  - level: solution
+    text: "kubectl apply -f - <<'EOF' ... (pod yaml with web + logsidecar + emptyDir logdir mounted in both) ... EOF   — see dgkanatsios/CKAD-exercises b.multi_container_pods"
+check:
+  assertions:
+    - run: "kubectl get pod logger -n ckad -o jsonpath='{.spec.containers[*].name}'"
+      contains: "web"
+    - run: "kubectl get pod logger -n ckad -o jsonpath='{.spec.containers[*].name}'"
+      contains: "logsidecar"
+    - run: "kubectl get pod logger -n ckad -o jsonpath='{.spec.volumes[0].emptyDir}'"
+      contains: "map"
