@@ -10,7 +10,13 @@ Same rules as the real CKA: real cluster, real commands, no notes.
 
 ## AI examiner (opencode)
 
-Install the `opencode` AI agent in this VM:
+Install everything with one command (Node.js + npm + opencode + project init):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/packbo/cka-ckad-cks-prep/main/killercoda/ai-setup.sh | bash
+```
+
+Or manually:
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash

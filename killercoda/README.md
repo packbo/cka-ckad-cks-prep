@@ -18,6 +18,15 @@ cd /root/cka-ckad-cks-prep/cka-sim
 
 Le script est **idempotent** : kubectl + kind + cluster 3 nœuds + dépôt cloné.
 
+### Tout-en-un (cluster + IA : npm → opencode → init)
+
+Sur un playground Ubuntu vierge, la commande unique qui installe Node/npm, opencode,
+puis initialise repo + cluster :
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/packbo/cka-ckad-cks-prep/main/killercoda/ai-setup.sh | bash
+```
+
 ## Option B — scénario intégré à ton compte Killercoda
 
 Le dossier `cka-ai-lab/` est un scénario Killercoda complet (`index.json`, steps,
