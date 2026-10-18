@@ -1,0 +1,29 @@
+id: first-pod
+title: "TON PREMIER POD — apprendre la syntaxe kubectl"
+domain: basics
+weight: 2
+difficulty: easy
+time_estimate: 180
+question: |
+  Objectif : créer un Pod nommé `test` dans le namespace `default`,
+  image `nginx`.
+
+  ⚠ Syntaxe : `--image=nginx` avec un signe ÉGAL (=) — jamais `--image:nginx`.
+
+  Tape la commande, puis vérifie avec `kubectl get pod test -n default`
+  (attends le statut `Running` — tape la commande autant de fois que besoin).
+hints:
+  - level: 1
+    text: "La famille de commandes pour créer un Pod s'appelle kubectl run. Il faut le nom, l'image et le namespace."
+  - level: 2
+    text: "kubectl run test --image=nginx -n default     puis vérifier : kubectl get pod test -n default"
+  - level: 3
+    text: "Piège du débutant : --image:nginx est INVALIDE (deux-points), c'est --image=nginx. Si le pod reste Pending/ContainerCreating, re-get jusqu'à Running."
+  - level: solution
+    text: "kubectl run test --image=nginx -n default && kubectl get pod test -n default"
+check:
+  assertions:
+    - run: "kubectl get pod test -n default -o jsonpath='{.spec.containers[0].image}'"
+      contains: "nginx"
+    - run: "kubectl get pod test -n default -o jsonpath='{.status.phase}'"
+      equals: "Running"

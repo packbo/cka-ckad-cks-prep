@@ -95,7 +95,7 @@ only replaces the backend + presentation layers.
 Create `scenarios/<domain>/<id>/scenario.yaml` (+ optional `setup.yaml`). Domains map to
 the exams: `01-workloads`, `02-services-networking`, `03-storage`,
 `04-cluster-architecture`, `05-troubleshooting`, `06-rbac`, `07-security` (CKS).
-26 scenarios ship today — many adapted from dgkanatsios/CKAD-exercises,
+29 scenarios ship today (3 guided 00-basics for kubectl syntax beginners) — many adapted from dgkanatsios/CKAD-exercises,
 walidshaari CKA/CKS and the CNCF curriculum (see `../ressources/`).
 
 Assertion keys: `run:` (shell command, stdout compared) or `file:` (path content),

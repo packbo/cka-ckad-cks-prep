@@ -150,7 +150,7 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
 
     _setup(scenario, backend)
     ui.question(scenario.question)
-    ui.info("meta:  :hint <1-4>  :check  :cheat  :tag  :back  :goto <n>  :solution  :skip  :exit")
+    ui.info("meta:  :hint <1-4>  :check  :cheat  :question  :tag  :back  :goto <n>  :solution  :skip  :exit")
     print()
 
     hints_used = 0
@@ -184,6 +184,9 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
                     ui.warn("not all checks passed yet — keep going")
             elif cmd == ":cheat" or cmd == ":cheatsheet":
                 cheatsheet.show(parts[1] if len(parts) > 1 else None)
+            elif cmd in (":question", ":show"):
+                # re-display the question when the terminal has scrolled past it
+                ui.question(scenario.question)
             elif cmd == ":tag":
                 note = " ".join(parts[1:]) or None
                 review.tag(scenario.id, note)
@@ -222,6 +225,8 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
             ui.out(cp.stderr.rstrip())
         if cp.returncode != 0 and not cp.stdout and not cp.stderr:
             ui.warn(f"(exit {cp.returncode})")
+        if cp.returncode != 0:
+            ui.info("→ débloque-toi :  :question (réafficher l'énoncé)  ·  :cheat basics (syntaxe)")
 
 
 def _check_assertions(scenario: Scenario) -> list:

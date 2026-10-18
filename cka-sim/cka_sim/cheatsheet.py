@@ -51,8 +51,11 @@ def show(topic: Optional[str] = None) -> None:
         ui.section("CHEAT · vitesse")
         _print_section("setup_once", data.get("setup_once", []))
         ui.out("")
-        ui.info("topics → " + "  ".join(f":cheat {t}" for t in topics())
-                + "  (ou :cheat <mot-clé> cherche partout)")
+        topics_line = "  ".join(
+            (f":cheat basics ← débutant" if t == "basics" else f":cheat {t}")
+            for t in topics()
+        )
+        ui.info(topics_line + "  (ou :cheat <mot-clé> cherche partout)")
         return
 
     t = topic.lower().strip()

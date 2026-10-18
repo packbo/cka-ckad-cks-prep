@@ -1,4 +1,46 @@
 {
+  "basics": [
+    {
+      "need": "SYNTAXE des flags — LE piège du débutant",
+      "how": "--image=nginx   (signe ÉGAL, jamais deux-points !)   --replicas=3   -n=default",
+      "note": "kubectl run test -n default --image:nginx  ← ERREUR. C'est --image=nginx. Les flags courts prennent 1 tiret (-n), les longs deux (--image)."
+    },
+    {
+      "need": "Créer un Pod (le hello-world de kubectl)",
+      "how": "kubectl run test --image=nginx -n default",
+      "note": "run = pods. Vérifie : kubectl get pod test -n default  (quelques secondes → Running)."
+    },
+    {
+      "need": "Voir / inspecter",
+      "how": "kubectl get pods -n default          # lister (pods/pv/nodes/svc/deploy...)",
+      "note": "kubectl describe pod test   ← le réflexe diagnostic n°1 (events en bas !)   ·   kubectl get pods -A  = tous les namespaces"
+    },
+    {
+      "need": "Logs / rentrer dans un pod",
+      "how": "kubectl logs test        kubectl exec -it test -- sh",
+      "note": "--  sépare kubectl de la commande DANS le conteneur. Sortir de sh : exit."
+    },
+    {
+      "need": "Supprimer",
+      "how": "kubectl delete pod test       # par type+nom",
+      "note": "kubectl delete pod/l'onglet-complete  ;  tout un namespace : kubectl delete ns <ns>"
+    },
+    {
+      "need": "Créer presque tout sans YAML (générateurs)",
+      "how": "kubectl create deployment web --image=nginx --replicas=3",
+      "note": "Aussi : create job / cronjob --schedule='*/5 * * * *' / sa / configmap --from-literal=k=v / secret generic --from-literal=pw=x"
+    },
+    {
+      "need": "Découvrir les champs d'une ressource",
+      "how": "kubectl explain pod.spec.containers",
+      "note": "Ajoute --recursive pour l'arbre complet. Marche pour TOUT (svc, deploy, pv...)."
+    },
+    {
+      "need": "Où je suis ? (namespace/contexte)",
+      "how": "kubectl config current-context        kubectl config view --minify",
+      "note": "Le flag -n <ns> cible UN namespace ; -A = tous ; sans -n = namespace courant."
+    }
+  ],
   "research_methods": [
     {
       "need": "Find the exact JSON path of a field",

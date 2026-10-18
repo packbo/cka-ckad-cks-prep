@@ -41,8 +41,8 @@ VAR_SHORTCUTS = {
 }
 
 META_COMMANDS = [
-    ":hint", ":check", ":cheat", ":cheatsheet", ":tag", ":untag",
-    ":back", ":goto", ":solution", ":skip", ":next", ":quit", ":exit",
+    ":hint", ":check", ":cheat", ":cheatsheet", ":question", ":show", ":tag",
+    ":untag", ":back", ":goto", ":solution", ":skip", ":next", ":quit", ":exit",
 ]
 FIRST_WORDS = sorted(set(ALIASES) | {
     "kubectl", "kind", "helm", "jq", "grep", "cat", "curl", "echo", "vim", "clear",
