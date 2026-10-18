@@ -16,6 +16,11 @@
       "note": "kubectl describe pod test   ← le réflexe diagnostic n°1 (events en bas !)   ·   kubectl get pods -A  = tous les namespaces"
     },
     {
+      "need": "Vérifier une commande avant de la lancer",
+      "how": "kubectl create deploy --help | less      kubectl options",
+      "note": "--help pour la commande, options pour les flags globaux. La Tab-complétion ne propose QUE les flags valides : if Tab ne complète pas, le flag n'existe pas."
+    },
+    {
       "need": "Logs / rentrer dans un pod",
       "how": "kubectl logs test        kubectl exec -it test -- sh",
       "note": "--  sépare kubectl de la commande DANS le conteneur. Sortir de sh : exit."
@@ -202,6 +207,43 @@
       "need": "Vérifications éclair",
       "how": "k get all -A  |  k get events --sort-by=.metadata.creationTimestamp  |  k get pods -o wide",
       "note": "+ k config current-context AVANT chaque question (piège #1 des multi-cluster)."
+    }
+  ],
+  "explain": [
+    {
+      "need": "LE réflexe : vérifier un champ AVANT de l'utiliser",
+      "how": "kubectl explain pod.spec.containers.resources",
+      "note": "Affiche le champ, ses sous-champs et le TYPE attendu — string, <[]Object> = LISTE d'objets, <>Object = objet unique."
+    },
+    {
+      "need": "Descendre chemin par chemin (comme des dossiers)",
+      "how": "kubectl explain pod  →  pod.spec  →  pod.spec.containers  →  pod.spec.containers.ports",
+      "note": "Chaque palier liste les champs du niveau suivant avec leur description. On ne devine JAMAIS un champ : on le vérifie."
+    },
+    {
+      "need": "Voir l'arbre ENTIER d'une ressource",
+      "how": "kubectl explain deployment --recursive",
+      "note": "Tout l'arbre sans descriptions → parfait avec grep : kubectl explain pod --recursive | grep -i image"
+    },
+    {
+      "need": "Vérifier les FLAGS d'une commande (≠ champs du manifest)",
+      "how": "kubectl run --help        kubectl options",
+      "note": "--help = flags de CETTE commande ; kubectl options = flags GLOBAUX (-n, -A, -o, --dry-run...). Tab complète aussi les flags."
+    },
+    {
+      "need": "Vérifier qu'un type de ressource / shortname existe",
+      "how": "kubectl api-resources | grep -i cron",
+      "note": "Donne le NOM, les SHORTNAMES (po, deploy, cj...) et le groupe API. kubectl api-versions liste les groupes."
+    },
+    {
+      "need": "Cibler une version d'API précise",
+      "how": "kubectl explain deployment --api-version=apps/v1",
+      "note": "Utile quand un champ bouge entre versions. Les noms de groupes viennent de api-versions / api-resources."
+    },
+    {
+      "need": "Le trio gagnant avant d'écrire quoi que ce soit",
+      "how": "1) api-resources (la ressource existe ?)  2) explain (le champ existe ?)  3) --help (le flag existe ?)",
+      "note": "30 secondes de vérif = zéro YAML cassé. L'examen AUTORISE kubernetes.io mais explain est plus rapide."
     }
   ]
 }
