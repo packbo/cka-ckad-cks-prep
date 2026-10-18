@@ -1,0 +1,28 @@
+id: expose-nodeport
+title: "Expose a Deployment as NodePort"
+domain: services-networking
+weight: 3
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  A Deployment `web` exists in namespace `front`.
+
+  Expose it on a Service named `web` of type `NodePort`, forwarding
+  port `80` to the container port `80`, with nodePort `30080`.
+hints:
+  - level: 1
+    text: "Use kubectl expose deploy web --type=NodePort --port=80 --target-port=80 . To set a specific nodePort you usually need to generate YAML."
+  - level: 2
+    text: "Generate then edit: kubectl expose deploy web --type=NodePort --port=80 --target-port=80 --name=web -n front --dry-run=client -o yaml > svc.yaml ; set spec.ports[0].nodePort=30080 ; kubectl apply -f svc.yaml"
+  - level: 3
+    text: "nodePort must be in range 30000-32767. Verify: kubectl get svc web -n front . Confirm endpoints exist: kubectl get endpoints web -n front"
+  - level: solution
+    text: "kubectl expose deploy web --type=NodePort --port=80 --target-port=80 --name=web -n front --dry-run=client -o yaml | sed 's/nodePort: .*/nodePort: 30080/' ... or hand-edit then kubectl apply -f"
+check:
+  assertions:
+    - run: "kubectl get svc web -n front -o jsonpath='{.spec.type}'"
+      equals: "NodePort"
+    - run: "kubectl get svc web -n front -o jsonpath='{.spec.ports[0].nodePort}'"
+      equals: "30080"

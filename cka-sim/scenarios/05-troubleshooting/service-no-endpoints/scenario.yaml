@@ -1,0 +1,29 @@
+id: service-no-endpoints
+title: "Fix a Service with no endpoints"
+domain: troubleshooting
+weight: 4
+difficulty: medium
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `front`, Service `web` has NO endpoints (kubectl get endpoints web
+  returns nothing). The Pods are healthy and running.
+
+  Fix the Service so it routes to the Pods. The Service selector must match the
+  Pods' labels.
+hints:
+  - level: 1
+    text: "Endpoints are empty when the Service selector does not match any Pod labels. Compare them."
+  - level: 2
+    text: "kubectl get pods -n front --show-labels   and   kubectl get svc web -n front -o yaml | grep -A5 selector  — find the mismatch."
+  - level: 3
+    text: "kubectl edit svc web -n front  and fix spec.selector to match the Pods' label (app=webapp). Then verify: kubectl get endpoints web -n front"
+  - level: solution
+    text: "kubectl patch svc web -n front -p '{\"spec\":{\"selector\":{\"app\":\"webapp\"}}}'   (the pods are labeled app=webapp; the service was selecting app=web)"
+check:
+  assertions:
+    - run: "kubectl get svc web -n front -o jsonpath='{.spec.selector.app}'"
+      equals: "webapp"
+    - run: "kubectl get endpoints web -n front -o jsonpath='{.subsets[*].addresses[*].ip}'"
+      contains: "."

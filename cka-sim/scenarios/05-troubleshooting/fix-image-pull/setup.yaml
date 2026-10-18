@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: broken
+  namespace: ops
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: broken
+  template:
+    metadata:
+      labels:
+        app: broken
+    spec:
+      containers:
+      - name: web
+        image: ngxnx

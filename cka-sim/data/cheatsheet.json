@@ -1,0 +1,54 @@
+{
+  "research_methods": [
+    {
+      "need": "Find the exact JSON path of a field",
+      "how": "kubectl get <res> <name> -o json | jq -r 'paths(scalars)|join(\".\")' | grep -i <field>",
+      "note": "Lists every leaf value path. Then convert to: kubectl get <res> -o jsonpath='{.the.path}'"
+    },
+    {
+      "need": "Find a field value when you don't know its path",
+      "how": "kubectl get <res> <name> -o json | jq '.. | .<field>? // empty'",
+      "note": ".. searches recursively everywhere in the tree."
+    },
+    {
+      "need": "Discover if a field exists / its name",
+      "how": "kubectl explain pod.spec --recursive | grep -i <field>",
+      "note": "explain shows the SCHEMA (all possible fields). Use --recursive for the tree, drop it for descriptions."
+    },
+    {
+      "need": "List vs single resource",
+      "how": "kubectl get pods (LIST) needs .items[*]   |   kubectl get pod X (SINGLE) has NO .items",
+      "note": "Check with: kubectl get pods -o json | jq 'keys'  -> if 'items' present, it's a list."
+    },
+    {
+      "need": "Avoid prompt glued to output (no trailing newline)",
+      "how": "Append {\"\\n\"} inside jsonpath: -o jsonpath='{.field}{\"\\n\"}'  OR use jq -r",
+      "note": "JSONPath never adds a newline. jq -r always does."
+    },
+    {
+      "need": "Image of a Deployment",
+      "how": "kubectl get deploy X -o jsonpath='{.spec.template.spec.containers[0].image}'",
+      "note": "Anything using a pod template (Deploy/STS/DS/Job) -> .spec.template.spec.containers. Only a Pod has .spec.containers."
+    },
+    {
+      "need": "Multiple containers",
+      "how": "[0] = first only ; [*] = all. For readable [*]: {range .spec.containers[*]}{.name}={.image}{\"\\n\"}{end}",
+      "note": "Count them first: kubectl get pod X -o json | jq '.spec.containers | length'"
+    },
+    {
+      "need": "Filter pods by condition (JSONPath can't filter)",
+      "how": "kubectl get pods --field-selector=status.phase=Running   OR   ... -o json | jq -r '.items[] | select(.status.phase==\"Running\") | .metadata.name'",
+      "note": "kubectl JSONPath does NOT support ?(@...==...) filters."
+    },
+    {
+      "need": "Copy a manifest template fast (NetworkPolicy, PV)",
+      "how": "kubernetes.io/docs/concepts/services-networking/network-policies/ -> Ctrl+F -> paste & edit",
+      "note": "kubernetes.io is ALLOWED during the exam. Bookmarks: cheatsheet, network-policies, persistent-volumes, rbac, kubeadm-upgrade."
+    },
+    {
+      "need": "Decode a secret value",
+      "how": "kubectl get secret X -o jsonpath='{.data.key}' | base64 -d",
+      "note": "Secrets store values base64-encoded in .data."
+    }
+  ]
+}

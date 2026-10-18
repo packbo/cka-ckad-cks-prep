@@ -1,0 +1,20 @@
+{
+  "title": "CKA Trainer Lab (cka-sim + AI tutor)",
+  "description": "Run the cka-sim exam trainer on a real multi-node kind cluster, then use an AI agent (opencode) as your examiner: progressive hints, generated scenarios, timed full exams.",
+  "difficulty": "medium",
+  "time": 90,
+  "details": {
+    "steps": [
+      { "title": "Environment check", "text": "step1.md" },
+      { "title": "Practice with scenarios", "text": "step2.md" },
+      { "title": "Timed exam + AI tutor", "text": "step3.md" }
+    ],
+    "intro": {
+      "text": "intro.md",
+      "background": "background.sh"
+    },
+    "finish": { "text": "finish.md" }
+  },
+  "environment": { "uilayout": "terminal" },
+  "backend": { "imageid": "ubuntu" }
+}

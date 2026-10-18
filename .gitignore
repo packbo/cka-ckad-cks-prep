@@ -1,0 +1,11 @@
+# Local AI-tool artifacts
+.claude/settings.local.json
+.opencode/plans/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store

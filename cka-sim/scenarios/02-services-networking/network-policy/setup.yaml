@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secure
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: db
+  namespace: secure
+  labels:
+    role: db
+spec:
+  containers:
+  - name: redis
+    image: redis:7
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+  namespace: secure
+  labels:
+    role: frontend
+spec:
+  containers:
+  - name: nginx
+    image: nginx:1.21

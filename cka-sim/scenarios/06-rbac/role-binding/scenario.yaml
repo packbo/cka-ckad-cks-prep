@@ -1,0 +1,37 @@
+id: role-binding
+title: "Create Role + RoleBinding for a ServiceAccount"
+domain: rbac
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `secure`:
+
+  1. Create a ServiceAccount named `app-sa`.
+  2. Create a Role named `pod-reader` granting `get, list, watch` on `pods`.
+  3. Create a RoleBinding named `app-pod-reader` binding Role `pod-reader`
+     to ServiceAccount `app-sa` (in namespace `secure`).
+hints:
+  - level: 1
+    text: "All three have one-shot kubectl create generators: kubectl create sa / kubectl create role / kubectl create rolebinding."
+  - level: 2
+    text: "kubectl create role pod-reader --verb=get,list,watch --resource=pods -n secure  and  kubectl create rolebinding app-pod-reader --role=pod-reader --serviceaccount=secure:app-sa -n secure"
+  - level: 3
+    text: "Common pitfall: the SA reference format is NAMESPACE:NAME (secure:app-sa). Verify everything: kubectl get sa,role,rolebinding -n secure  and  kubectl describe rolebinding app-pod-reader -n secure"
+  - level: solution
+    text: |
+      kubectl create sa app-sa -n secure
+      kubectl create role pod-reader --verb=get,list,watch --resource=pods -n secure
+      kubectl create rolebinding app-pod-reader --role=pod-reader --serviceaccount=secure:app-sa -n secure
+check:
+  assertions:
+    - run: "kubectl get role pod-reader -n secure -o jsonpath='{.rules[0].resources}'"
+      contains: "pods"
+    - run: "kubectl get role pod-reader -n secure -o jsonpath='{.rules[0].verbs}'"
+      contains: "list"
+    - run: "kubectl get rolebinding app-pod-reader -n secure -o jsonpath='{.roleRef.name}'"
+      equals: "pod-reader"
+    - run: "kubectl get rolebinding app-pod-reader -n secure -o jsonpath='{.subjects[0].name}'"
+      equals: "app-sa"

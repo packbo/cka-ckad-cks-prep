@@ -1,0 +1,29 @@
+id: etcd-backup
+title: "Take an etcd snapshot"
+domain: cluster-architecture
+weight: 5
+difficulty: hard
+time_estimate: 480
+setup:
+  apply: setup.yaml
+question: |
+  Take an etcd snapshot of the cluster and save it to `/tmp/etcd-snapshot.db`
+  on THIS host (the simulator host). The file must be non-empty.
+
+  (The cluster is a kind cluster; etcd runs inside the control-plane container.)
+hints:
+  - level: 1
+    text: "etcd backup uses etcdctl with ETCDCTL_API=3. etcd runs inside the kind control-plane container, so run etcdctl there then copy the file out."
+  - level: 2
+    text: "Find the etcd endpoint + certs: kubectl -n kube-system describe pod/etcd-<control-plane> | grep -E 'cert|key|trusted|advertise' . Or inspect: kubectl -n kube-system get pod -l component=etcd"
+  - level: 3
+    text: "Inside the control-plane container run: ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key snapshot save /tmp/etcd-snapshot.db  Then copy out: docker cp cka-sim-control-plane:/tmp/etcd-snapshot.db /tmp/etcd-snapshot.db"
+  - level: solution
+    text: |
+      CP=cka-sim-control-plane
+      kubectl -n kube-system exec etcd-$CP -- sh -c "ETCDCTL_API=3 etcdctl snapshot save /tmp/etcd-snapshot.db --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key"
+      docker cp $CP:/tmp/etcd-snapshot.db /tmp/etcd-snapshot.db
+check:
+  assertions:
+    - run: "test -s /tmp/etcd-snapshot.db && echo snapshot-ok"
+      contains: "snapshot-ok"
