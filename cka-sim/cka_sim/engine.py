@@ -7,12 +7,26 @@ from typing import List, Optional
 
 import yaml
 
-from cka_sim import cheatsheet, completion, ui
+from cka_sim import cheatsheet, completion, review, ui
 from cka_sim.cluster import ClusterBackend, run_shell
 from cka_sim.hints import PENALTY, show_hint
 from cka_sim.paths import SCENARIOS_DIR
 from cka_sim.timer import Timer
 from cka_sim.validator import run_all
+
+
+class NavRequest(Exception):
+    """Session navigation asked via :back / :goto — caught by the session loop."""
+
+    def __init__(self, target: int = 0, relative: bool = False, listing: bool = False):
+        self.target = target
+        self.relative = relative
+        self.listing = listing
+        super().__init__(f"nav target={target} relative={relative} listing={listing}")
+
+
+class SessionExit(Exception):
+    """:exit — leave the exam/review session immediately (partial report)."""
 
 
 @dataclass
@@ -136,7 +150,7 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
 
     _setup(scenario, backend)
     ui.question(scenario.question)
-    ui.info("meta-commands:  :hint <1-4>   :check   :cheat [jq|jsonpath|...]   :solution   :skip")
+    ui.info("meta:  :hint <1-4>  :check  :cheat  :tag  :back  :goto <n>  :solution  :skip  :exit")
     print()
 
     hints_used = 0
@@ -170,6 +184,25 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
                     ui.warn("not all checks passed yet — keep going")
             elif cmd == ":cheat" or cmd == ":cheatsheet":
                 cheatsheet.show(parts[1] if len(parts) > 1 else None)
+            elif cmd == ":tag":
+                note = " ".join(parts[1:]) or None
+                review.tag(scenario.id, note)
+                extra = f"  note: {note}" if note else ""
+                ui.hint(f"★ tagged for review: {scenario.id}{extra}")
+            elif cmd == ":untag":
+                review.untag(scenario.id)
+                ui.hint(f"un-tagged: {scenario.id}")
+            elif cmd == ":back":
+                raise NavRequest(-1, relative=True)
+            elif cmd == ":goto":
+                if len(parts) == 1:
+                    raise NavRequest(listing=True)
+                try:
+                    raise NavRequest(int(parts[1]))
+                except ValueError:
+                    ui.warn(f"usage: :goto <n>   (question number)")
+            elif cmd == ":exit":
+                raise SessionExit()
             elif cmd == ":solution":
                 show_hint(scenario, 4, ui)
                 return ScenarioResult(scenario, False, 0.0, 4)

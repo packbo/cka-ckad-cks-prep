@@ -40,7 +40,10 @@ VAR_SHORTCUTS = {
     "$now": "--force --grace-period=0",
 }
 
-META_COMMANDS = [":hint", ":check", ":cheat", ":cheatsheet", ":solution", ":skip", ":next", ":quit"]
+META_COMMANDS = [
+    ":hint", ":check", ":cheat", ":cheatsheet", ":tag", ":untag",
+    ":back", ":goto", ":solution", ":skip", ":next", ":quit", ":exit",
+]
 FIRST_WORDS = sorted(set(ALIASES) | {
     "kubectl", "kind", "helm", "jq", "grep", "cat", "curl", "echo", "vim", "clear",
 })
@@ -98,6 +101,8 @@ def candidates(line: str, text: str) -> list[str]:
         first = line.split()[0]
         if first == ":hint":
             return [n for n in ("1", "2", "3", "4") if n.startswith(text)]
+        if first == ":goto":
+            return [str(n) for n in range(1, 21) if str(n).startswith(text)]
         if first in (":cheat", ":cheatsheet"):
             from cka_sim import cheatsheet
             return [t for t in cheatsheet.topics() if t.startswith(text)]

@@ -22,9 +22,12 @@ bash install.sh          # installs kind + jq + python deps + creates the cluste
 
 | Command | Action |
 |---------|--------|
-| `./run.sh list` | List all scenarios |
+| `./run.sh list` | List all scenarios (★ = tagged for review) |
 | `./run.sh run <id>` | Run a single scenario |
 | `./run.sh exam [--exam full-exam.yaml]` | Full timed exam with score report |
+| `./run.sh tagged` | List scenarios tagged for review |
+| `./run.sh review` | Re-run all tagged scenarios (revision queue) |
+| `./run.sh tag <id> [--note "..."]` / `untag <id>` | Manage review tags from the shell |
 | `./run.sh up` / `down` / `reset` | Manage the kind cluster |
 | `./run.sh status` | Show tooling/cluster status |
 
@@ -38,11 +41,18 @@ Meta-commands:
 | Meta-command | Effect | Score penalty |
 |--------------|--------|---------------|
 | `:hint 1` | Orientation (which command family) | -10% |
-| `:hint 2` | **Research method** (`paths(scalars)`, `explain --recursive \| grep`) | -25% |
+| `:hint 2` | Research method (`paths(scalars)`, `explain --recursive`) | -25% |
 | `:hint 3` | Doc tip / anti-pitfall | -40% |
 | `:check` | Validate the cluster state | — |
+| `:cheat [topic]` | Speed cheatsheet: setup-once, jq, jsonpath, kubectl | — |
+| `:tag [note]` / `:untag` | Mark scenario for review (persisted, `./run.sh review`) | — |
+| `:back` / `:goto <n>` | In exam/review: previous question / jump (bare `:goto` = map) | — |
+| `:exit` | Leave the session immediately (partial report) | — |
 | `:solution` | Show full solution | 0 points |
 | `:skip` / `:next` | Move on | — |
+
+In sessions (`exam`/`review`), the first **PASSED** attempt is the one kept for the
+score — revisiting a solved question is practice-only.
 
 ## Scenario format
 
