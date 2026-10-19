@@ -1,21 +1,28 @@
-# CKA Simulator
+# CKA / CKAD / CKS Simulator
 
 A local Kubernetes exam trainer (à la Killercoda/Killer.sh) with a **progressive hint
 system that teaches the *research method*** — the differentiator vs Killer.sh (which
 has no hints).
 
-Runs a real multi-node cluster via **kind**. Built in Python, with a clean
-`ClusterBackend` abstraction so it can later evolve into a hosted SaaS (vcluster
-Private Nodes) without touching the scenario engine.
+Runs a real multi-node cluster via **kind**. One shared Python engine, **one bank
+per certification**:
 
-## Quick start
+```
+cka-sim/
+├── scenarios/cka/...     today's bank (workloads, networking, storage, rbac...)
+├── scenarios/ckad/       drop CKAD scenarios here (same format)
+├── scenarios/cks/        drop CKS scenarios here (same format)
+└── exams/cka|ckad|cks/   full-exam.yaml + web-exam.yaml per cert
+```
+
+## Quick start (from the repo root after git clone)
 
 ```bash
-bash install.sh          # installs kind + jq + python deps + creates the cluster
-./run.sh list            # list scenarios (no cluster needed)
-./run.sh status          # cluster / tooling status
-./run.sh run create-deploy       # run one scenario
-./run.sh exam            # full timed exam (2h, weighted, scored)
+bash install.sh          # kind + deps (venv only if python is externally-managed:
+                         #  Killercoda = system pip, Ubuntu 24 VPS = auto venv)
+./run.sh list            # CKA bank (default)
+./run.sh --cert ckad list  # once CKAD scenarios exist
+./run.sh web             # browser exam UI on NodePort 30999
 ```
 
 ## Commands
@@ -117,13 +124,19 @@ Backend      : ClusterBackend interface
 The engine and the scenario bank are **backend-agnostic**. Hosting the product later
 only replaces the backend + presentation layers.
 
-## Adding scenarios
+## Adding scenarios (any cert)
 
-Create `scenarios/<domain>/<id>/scenario.yaml` (+ optional `setup.yaml`). Domains map to
-the exams: `01-workloads`, `02-services-networking`, `03-storage`,
+Create `scenarios/<cert>/<domain>/<id>/scenario.yaml` (+ optional `setup.yaml`) —
+today everything lives under `scenarios/cka/`; drop CKAD/CKS banks in
+`scenarios/ckad/`, `scenarios/cks/` (same format). Domains map to the exam
+blueprints: `01-workloads`, `02-services-networking`, `03-storage`,
 `04-cluster-architecture`, `05-troubleshooting`, `06-rbac`, `07-security` (CKS).
 30 scenarios ship today (4 guided 00-basics: syntaxe kubectl + méthode explain) — many adapted from dgkanatsios/CKAD-exercises,
 walidshaari CKA/CKS and the CNCF curriculum (see `../ressources/`).
 
 Assertion keys: `run:` (shell command, stdout compared) or `file:` (path content),
 with `contains:` or `equals:`.
+
+Pick the bank with `./run.sh --cert cka|ckad|cks …` (or env `CKA_SIM_CERT`).
+In-session navigation (`:back`, `:goto n`) **never resets** a question — your
+changes are kept; `:reset` explicitly re-applies a scenario's setup.

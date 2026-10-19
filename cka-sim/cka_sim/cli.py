@@ -7,7 +7,7 @@ import sys
 
 import yaml
 
-from cka_sim import review, ui
+from cka_sim import paths, review, ui
 from cka_sim.cluster import KindBackend, kind_installed, kubectl_installed
 from cka_sim.engine import (
     NavRequest,
@@ -16,7 +16,7 @@ from cka_sim.engine import (
     load_scenarios,
     run_scenario,
 )
-from cka_sim.paths import EXAMS_DIR
+from cka_sim.paths import EXAMS_ROOT
 from cka_sim.reporter import report
 from cka_sim.timer import Timer
 
@@ -26,7 +26,8 @@ backend = KindBackend()
 def cmd_list(args):
     scen = load_scenarios()
     if not scen:
-        ui.warn("no scenarios found in scenarios/")
+        ui.warn(f"no scenarios found in {paths.scenarios_dir()}/")
+        ui.info("drop them as scenarios/<cert>/<domain>/<id>/scenario.yaml (same format as CKA)")
         return
     n_tagged = sum(1 for s in scen if review.is_tagged(s.id))
     print(f"{'id':28} {'domain':22} {'weight':>6} {'diff':8} title")
@@ -92,6 +93,7 @@ def _session_loop(ids, minutes=None):
 
     timer = Timer()
     results: dict = {}
+    setup_done: set = set()   # setup applies ONCE per scenario per session
     i = 0
     while 0 <= i < len(seq):
         sid = seq[i]
@@ -102,7 +104,8 @@ def _session_loop(ids, minutes=None):
             nav_help += " :exit)"
         ui.info(f"=== Question {i + 1}/{len(seq)} ==={nav_help}   ★=tagged  :goto sans n° = carte")
         try:
-            r = run_scenario(all_scen[sid], backend, exam_timer=timer if minutes else None)
+            r = run_scenario(all_scen[sid], backend, exam_timer=timer if minutes else None,
+                             setup_done=setup_done)
         except SessionExit:
             ui.warn("session interrupted — partial report")
             break
@@ -134,7 +137,10 @@ def _session_loop(ids, minutes=None):
 def cmd_exam(args):
     if not _require_ready():
         return
-    exam_path = os.path.join(EXAMS_DIR, args.exam)
+    name = args.exam or "full-exam.yaml"
+    if "/" not in name:
+        name = f"{paths.active_cert()}/{name}"
+    exam_path = name if os.path.isabs(name) else os.path.join(EXAMS_ROOT, name)
     if not os.path.exists(exam_path):
         ui.warn(f"exam file not found: {exam_path}")
         return
@@ -281,7 +287,9 @@ def cmd_webstop(args):
 
 
 def build_parser():
-    p = argparse.ArgumentParser(prog="cka-sim", description="CKA exam simulator (local kind)")
+    p = argparse.ArgumentParser(prog="cka-sim", description="Kubernetes exam simulator (cka | ckad | cks)")
+    p.add_argument("--cert", default=None, choices=list(paths.CERTS),
+                   help="certification bank to use (default: $CKA_SIM_CERT or 'cka')")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("list", help="list available scenarios (★ = tagged for review)").set_defaults(func=cmd_list)
@@ -290,7 +298,7 @@ def build_parser():
     sp.set_defaults(func=cmd_run)
 
     sp = sub.add_parser("exam", help="run a full timed exam (:back/:goto to navigate)")
-    sp.add_argument("--exam", default="full-exam.yaml")
+    sp.add_argument("--exam", default=None, help="exam yaml under exams/<cert>/ (default: full-exam.yaml)")
     sp.set_defaults(func=cmd_exam)
 
     sub.add_parser("tagged", help="list scenarios tagged for review").set_defaults(func=cmd_tagged)
@@ -316,6 +324,7 @@ def build_parser():
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    paths.set_cert(args.cert)
     args.func(args)
 
 

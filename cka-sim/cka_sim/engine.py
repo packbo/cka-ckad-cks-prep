@@ -10,7 +10,7 @@ import yaml
 from cka_sim import cheatsheet, completion, review, ui
 from cka_sim.cluster import ClusterBackend, run_shell
 from cka_sim.hints import PENALTY, show_hint
-from cka_sim.paths import SCENARIOS_DIR
+from cka_sim.paths import scenarios_dir
 from cka_sim.timer import Timer
 from cka_sim.validator import run_all
 
@@ -62,10 +62,11 @@ class ScenarioResult:
 
 def load_scenarios() -> List[Scenario]:
     scenarios: List[Scenario] = []
-    for root, _, files in os.walk(SCENARIOS_DIR):
+    root = scenarios_dir()
+    for dirpath, _, files in os.walk(root):
         for f in files:
             if f == "scenario.yaml":
-                scenarios.append(_load(os.path.join(root, f)))
+                scenarios.append(_load(os.path.join(dirpath, f)))
     scenarios.sort(key=lambda s: s.id)
     return scenarios
 
@@ -142,15 +143,33 @@ def _wait_namespaces_gone(setup_path: str, timeout_s: int = 30) -> None:
         ui.warn(f"[setup] namespace(s) still terminating: {', '.join(pending)}")
 
 
-def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Optional[Timer] = None) -> ScenarioResult:
+def run_scenario(
+    scenario: Scenario,
+    backend: ClusterBackend,
+    exam_timer: Optional[Timer] = None,
+    setup_done: Optional[set] = None,
+) -> ScenarioResult:
+    """Run one scenario interactively.
+
+    Setup (delete-then-apply) runs ONCE per scenario per session so that
+    navigating (:back / :goto) never reverts the user's work. ``setup_done``
+    is shared across the whole session when provided by the session loop.
+    Use :reset to explicitly re-apply the setup.
+    """
     ui.section(f"[{scenario.id}] {scenario.title}  ({scenario.domain}, {scenario.weight}%)")
     ui.info(f"difficulty: {scenario.difficulty}  |  suggested: {scenario.time_estimate}s")
     if exam_timer:
         ui.info(f"exam elapsed: {exam_timer.fmt()}")
 
-    _setup(scenario, backend)
+    if setup_done is None:
+        setup_done = set()
+    if scenario.id in setup_done:
+        ui.info("[setup] skipped — question re-entered, your changes are kept  (:reset to start over)")
+    else:
+        _setup(scenario, backend)
+        setup_done.add(scenario.id)
     ui.question(scenario.question)
-    ui.info("meta:  :hint <1-4>  :check  :cheat  :question  :tag  :back  :goto <n>  :solution  :skip  :exit")
+    ui.info("meta:  :hint <1-4>  :check  :cheat  :question  :reset  :tag  :back  :goto <n>  :solution  :skip  :exit")
     print()
 
     hints_used = 0
@@ -186,6 +205,12 @@ def run_scenario(scenario: Scenario, backend: ClusterBackend, exam_timer: Option
                 cheatsheet.show(parts[1] if len(parts) > 1 else None)
             elif cmd in (":question", ":show"):
                 # re-display the question when the terminal has scrolled past it
+                ui.question(scenario.question)
+            elif cmd == ":reset":
+                # explicit re-apply of the scenario setup (navigation never resets)
+                _setup(scenario, backend)
+                setup_done.add(scenario.id)
+                ui.hint(f"scenario '{scenario.id}' reset to its initial state")
                 ui.question(scenario.question)
             elif cmd == ":tag":
                 note = " ".join(parts[1:]) or None

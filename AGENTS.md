@@ -12,16 +12,23 @@ killercoda/     Scénario Killercoda déployable + bootstrap.sh
 
 ## Commandes du simulateur
 
+Entry points à la **racine du dépôt** (dispatchent vers `cka-sim/`) :
+
 ```bash
-cd cka-sim
-./run.sh list                 # scénarios disponibles
+./run.sh list                 # banque CKA par défaut
+./run.sh --cert ckad list     # banque CKAD (scénarios/ckad/)
+./run.sh --cert cks list      # banque CKS (scénarios/cks/)
 ./run.sh run <id>             # lancer un scénario
 ./run.sh exam                 # examen complet chronométré (2h, noté)
+./run.sh web                  # UI web d'examen (NodePort 30999)
 ./run.sh status               # état cluster/outils
-bash install.sh               # (re)installer kind + cluster si besoin
+bash install.sh               # setup complet (venv seulement si python externally-managed)
 ```
 
-## Format d'un scénario (`cka-sim/scenarios/<domaine>/<id>/scenario.yaml`)
+Navigation en session (`:back`, `:goto n`) : **ne réinitialise jamais** un scénario
+(les changements sont conservés) ; `:reset` ré-applique explicitement le setup.
+
+## Format d'un scénario (`cka-sim/scenarios/<cert>/<domaine>/<id>/scenario.yaml`)
 
 ```yaml
 id: extract-image-deploy

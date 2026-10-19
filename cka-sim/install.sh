@@ -27,15 +27,45 @@ if ! command -v jq >/dev/null 2>&1; then
   sudo apt-get update -qq && sudo apt-get install -y -qq jq
 fi
 
-echo "Installing python deps..."
-if python3 -m venv "$SCRIPT_DIR/.venv" 2>/dev/null; then
-  "$SCRIPT_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
-  "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
-  echo "python deps installed in .venv (run.sh will use it automatically)"
+# --- python deps: venv only when needed -------------------------------------
+# Killercoda & co already provide a ready python env: no venv there.
+# VPS/desktop with PEP 668 (externally-managed) python: venv required.
+# Override:  bash install.sh --venv | --no-venv   (or env CKA_SIM_VENV=force|never|auto)
+VENV_MODE="${CKA_SIM_VENV:-auto}"
+for a in "$@"; do
+  case "$a" in
+    --venv)   VENV_MODE=force ;;
+    --no-venv) VENV_MODE=never ;;
+  esac
+done
+
+EXT_MANAGED=0
+if python3 -c "import sysconfig,os; raise SystemExit(0 if os.path.exists(os.path.join(sysconfig.get_path('stdlib'),'EXTERNALLY-MANAGED')) else 1)"; then
+  EXT_MANAGED=1
+fi
+
+USE_VENV=0
+case "$VENV_MODE" in
+  force) USE_VENV=1 ;;
+  never) USE_VENV=0 ;;
+  auto)  [ "$EXT_MANAGED" = "1" ] && USE_VENV=1 ;;
+esac
+
+echo "Installing python deps... (venv: $VENV_MODE$( [ "$EXT_MANAGED" = 1 ] && echo ", externally-managed python" || echo ", standard python" ))"
+if [ "$USE_VENV" = "1" ]; then
+  if python3 -m venv "$SCRIPT_DIR/.venv" 2>/dev/null; then
+    "$SCRIPT_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+    "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
+    echo "python deps installed in .venv (run.sh will use it automatically)"
+  else
+    # venv module unavailable (python3-full missing) -> fall back to system pip
+    pip3 install -q -r "$SCRIPT_DIR/requirements.txt" || \
+      pip3 install -q --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+  fi
 else
-  # venv unavailable (needs python3-full on Debian) -> fall back to system pip
   pip3 install -q -r "$SCRIPT_DIR/requirements.txt" || \
     pip3 install -q --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+  echo "installed system-wide (Killercoda-ready). Force a venv with: bash install.sh --venv"
 fi
 
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then

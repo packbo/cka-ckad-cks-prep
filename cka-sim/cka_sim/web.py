@@ -23,9 +23,10 @@ import yaml
 from cka_sim.cluster import run_shell
 from cka_sim.engine import load_assertions, load_scenarios
 from cka_sim.hints import PENALTY
-from cka_sim.paths import CHEATSHEET_PATH, EXAMS_DIR
+from cka_sim.paths import CHEATSHEET_PATH, EXAMS_ROOT
 
-EXAM_FILE = os.environ.get("CKA_SIM_EXAM", "web-exam.yaml")
+_CERT = os.environ.get("CKA_SIM_CERT", "cka")
+EXAM_FILE = os.environ.get("CKA_SIM_EXAM", f"{_CERT}/web-exam.yaml")
 PORT = int(os.environ.get("CKA_SIM_WEB_PORT", "8080"))
 
 DOC_LINKS = [
@@ -56,7 +57,8 @@ class ExamState:
         self.threshold = 66
 
     def load(self) -> None:
-        with open(os.path.join(EXAMS_DIR, EXAM_FILE)) as fh:
+        exam_path = EXAM_FILE if os.path.isabs(EXAM_FILE) else os.path.join(EXAMS_ROOT, EXAM_FILE)
+        with open(exam_path) as fh:
             exam = yaml.safe_load(fh)
         self.minutes = int(exam.get("minutes", 120))
         self.threshold = int(exam.get("threshold", 66))
