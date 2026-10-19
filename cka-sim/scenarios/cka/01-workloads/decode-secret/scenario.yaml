@@ -1,0 +1,26 @@
+id: decode-secret
+title: "Decode a password from a Secret"
+domain: workloads
+weight: 3
+difficulty: easy
+time_estimate: 120
+setup:
+  apply: setup.yaml
+question: |
+  Decode the password from Secret `db-creds` (namespace `secrets`) and write
+  the decoded plaintext value to `/tmp/password.txt`.
+hints:
+  - level: 1
+    text: "Secrets store values base64-encoded in .data. Inspect: kubectl get secret db-creds -n secrets -o yaml"
+  - level: 2
+    text: "Extract + decode: kubectl get secret db-creds -n secrets -o jsonpath='{.data.password}' | base64 -d"
+  - level: 3
+    text: "Redirect to the file: ... | base64 -d > /tmp/password.txt  (base64 -d outputs raw bytes, no trailing newline)"
+  - level: solution
+    text: "kubectl get secret db-creds -n secrets -o jsonpath='{.data.password}' | base64 -d > /tmp/password.txt && cat /tmp/password.txt"
+check:
+  assertions:
+    - file: /tmp/password.txt
+      contains: "p16w0rd"
+    - run: "kubectl get secret db-creds -n secrets -o jsonpath='{.data.password}' | base64 -d"
+      contains: "p16w0rd"

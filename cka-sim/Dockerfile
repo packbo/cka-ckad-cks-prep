@@ -9,6 +9,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY cka_sim /app/cka_sim
+COPY cka_sim/static /app/cka_sim/static
 COPY scenarios /app/scenarios
 COPY exams /app/exams
 COPY data /app/data

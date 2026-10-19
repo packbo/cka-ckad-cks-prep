@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secrets
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-creds
+  namespace: secrets
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: cDE2dzByZA==

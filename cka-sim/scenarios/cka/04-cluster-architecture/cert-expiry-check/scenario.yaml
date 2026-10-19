@@ -1,0 +1,29 @@
+id: cert-expiry-check
+title: "Check API server certificate expiration"
+domain: cluster-architecture
+weight: 4
+difficulty: medium
+time_estimate: 180
+requires: {node_exec: true}
+setup:
+  apply: setup.yaml
+question: |
+  Find the expiration date (`notAfter`) of the API server certificate and
+  write the full date string to `/tmp/cert-expiry.txt` (one line).
+hints:
+  - level: 1
+    text: "API server certs live in /etc/kubernetes/pki/apiserver.crt on the control-plane node."
+  - level: 2
+    text: "%NODEEXEC% openssl x509 -enddate -noout -in /etc/kubernetes/pki/apiserver.crt"
+  - level: 3
+    text: "Extract just the date: ... | grep notAfter | sed 's/notAfter=//' > /tmp/cert-expiry.txt"
+  - level: solution
+    text: |
+      %NODEEXEC% openssl x509 -enddate -noout -in /etc/kubernetes/pki/apiserver.crt | sed 's/notAfter=//' > /tmp/cert-expiry.txt
+      cat /tmp/cert-expiry.txt
+check:
+  assertions:
+    - file: /tmp/cert-expiry.txt
+      contains: "20"
+    - run: "%NODEEXEC% openssl x509 -enddate -noout -in /etc/kubernetes/pki/apiserver.crt"
+      contains: "notAfter"

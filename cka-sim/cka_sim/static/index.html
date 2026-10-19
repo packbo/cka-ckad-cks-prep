@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CKA Exam Simulator</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#0f1420;color:#dde5f2;min-height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 20px;background:#1a2233;border-bottom:1px solid #28324a;flex-wrap:wrap}
+header h1{font-size:16px;color:#4da3ff}
+.certbtn{background:transparent;border:1px solid #28324a;color:#8b99b0;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600}
+.certbtn.active{background:#4da3ff;color:#08121f;border-color:#4da3ff}
+.certbtn:hover:not(.active){color:#dde5f2}
+#timer{font-family:monospace;font-size:15px;color:#4da3ff;margin-left:auto}
+.tabs{display:flex;gap:2px;padding:0 20px;background:#1a2233}
+.tab{padding:8px 18px;cursor:pointer;color:#8b99b0;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;font-size:14px}
+.tab.active{background:#141b2b;color:#dde5f2;border-color:#28324a}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:#1a2233;border:1px solid #28324a;border-radius:8px;padding:14px;margin-bottom:14px}
+.card h3{font-size:13px;color:#8b99b0;text-transform:uppercase;margin-bottom:10px}
+button{background:#4da3ff;border:none;color:#08121f;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:13px;margin:2px}
+button:hover{filter:brightness(1.15)}
+button.ghost{background:transparent;color:#dde5f2;border:1px solid #28324a}
+button.warn{background:#c58aff;color:#1d1226}
+button.ok{background:#3ecf8e}
+pre{background:#0b101c;border:1px solid #28324a;border-radius:6px;padding:10px;font-size:12px;overflow:auto;max-height:300px;white-space:pre-wrap}
+input.cmd{width:100%;background:#0b101c;border:1px solid #28324a;color:#dde5f2;border-radius:5px;padding:8px 10px;font-family:monospace;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
+.st-solved{color:#3ecf8e}.st-pending{color:#8b99b0}.st-skipped{color:#ff6b6b}.st-active{color:#4da3ff}
+.qtext{background:#141b2b;border:1px solid #28324a;border-radius:6px;padding:12px;font-size:14px;line-height:1.5;white-space:pre-wrap}
+.hintbox{border-left:3px solid #c58aff;padding:6px 10px;margin:6px 0;background:#141b2b;font-size:13px}
+.bigscore{font-size:36px;font-weight:800}
+.pass{color:#3ecf8e}.fail{color:#ff6b6b}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:100}
+#modal .box{background:#1a2233;border:2px solid #4da3ff;border-radius:10px;padding:28px;min-width:320px;text-align:center}
+#modal h2{color:#4da3ff;margin-bottom:20px}
+#banner{display:none;background:#1a2233;border:1px solid #4da3ff;border-radius:6px;padding:10px;margin-bottom:12px;font-size:14px}
+.docs a{color:#4da3ff;text-decoration:none;font-size:15px;display:block;padding:6px 0}
+.cheat{border-left:3px solid #4da3ff;padding:8px 12px;margin:8px 0;background:#141b2b;font-size:13px}
+.cheat code{display:block;background:#0b101c;padding:6px 8px;margin:4px 0;font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Exam Simulator</h1>
+  <button class="certbtn active" id="cert-cka" onclick="switchCert('cka')">CKA</button>
+  <button class="certbtn" id="cert-ckad" onclick="switchCert('ckad')">CKAD</button>
+  <button class="certbtn" id="cert-cks" onclick="switchCert('cks')">CKS</button>
+  <span id="score" style="color:#8b99b0;font-size:13px"></span>
+  <span id="timer">--:--</span>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-p="p-exam">Exam</div>
+  <div class="tab" data-p="p-cheat">Cheatsheet</div>
+  <div class="tab" data-p="p-docs">Docs</div>
+</div>
+
+<main>
+  <div id="banner"></div>
+
+  <div id="p-exam" class="page" style="display:block">
+    <div class="card">
+      <h3>Question</h3>
+      <div id="qmeta" style="color:#8b99b0;font-size:12px;margin-bottom:8px"></div>
+      <div class="qtext" id="qtext">Select a question from the list below.</div>
+      <div id="hints"></div>
+      <div style="margin-top:10px">
+        <button class="ok" onclick="startQ(CUR)">Start</button>
+        <button class="warn" onclick="askHint(1)">Hint 1</button>
+        <button class="warn" onclick="askHint(2)">Hint 2</button>
+        <button class="warn" onclick="askHint(3)">Hint 3</button>
+        <button class="ghost" onclick="askHint(4)">Solution</button>
+        <button class="ok" onclick="checkQ()">Check</button>
+        <button class="ghost" onclick="skipQ()">Skip</button>
+        <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
+        <button class="ghost" onclick="resetQ()">↻ Reset</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Terminal</h3>
+      <input class="cmd" id="cmd" placeholder="kubectl get pods (Enter to run)"
+             onkeydown="if(event.key==='Enter')runCmd()">
+      <pre id="out"></pre>
+    </div>
+    <div class="card">
+      <h3>Questions</h3>
+      <table id="qtable"></table>
+    </div>
+    <div class="card">
+      <h3>Report</h3>
+      <div id="report" style="color:#8b99b0">Start the exam to see results.</div>
+    </div>
+  </div>
+
+  <div id="p-cheat" class="page" style="display:none">
+    <div class="card"><h3>Research Methods</h3><div id="cheats"></div></div>
+  </div>
+
+  <div id="p-docs" class="page" style="display:none">
+    <div class="card docs"><h3>kubernetes.io (opens in new tab)</h3><div id="doclist"></div></div>
+  </div>
+</main>
+
+<div id="modal">
+  <div class="box">
+    <h2>🎓 Choose your exam</h2>
+    <div style="margin-bottom:16px">
+      <div style="color:#8b99b0;font-size:13px;margin-bottom:6px">Certification</div>
+      <button class="certbtn active" id="m-cka" onclick="mCert('cka')">CKA</button>
+      <button class="certbtn" id="m-ckad" onclick="mCert('ckad')">CKAD</button>
+      <button class="certbtn" id="m-cks" onclick="mCert('cks')">CKS</button>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="color:#8b99b0;font-size:13px;margin-bottom:6px">Exam</div>
+      <select id="m-exam" style="background:#141b2b;color:#dde5f2;border:1px solid #28324a;border-radius:5px;padding:8px 14px;font-size:14px">
+        <option value="web-exam.yaml">web-exam (recommended)</option>
+        <option value="full-exam.yaml">full-exam (all questions)</option>
+      </select>
+    </div>
+    <button class="ok" style="padding:10px 36px;font-size:15px" onclick="startExam()">Start</button>
+  </div>
+</div>
+
+<script>
+var CUR=-1, MCERT='cka', EXAM_MIN=0, ELAPSED=0;
+function $(id){return document.getElementById(id)}
+
+// ── Tabs ──
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
+    document.querySelectorAll('.page').forEach(function(x){x.style.display='none'});
+    t.classList.add('active');
+    $(t.dataset.p).style.display='block';
+  });
+});
+
+// ── API ──
+function api(path,body){
+  var opts=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};
+  return fetch('/api/'+path,opts).then(function(r){return r.json()});
+}
+
+// ── Timer ──
+setInterval(function(){
+  if(!EXAM_MIN)return;
+  var left=Math.max(0,EXAM_MIN*60-ELAPSED);ELAPSED++;
+  var m=Math.floor(left/60),s=left%60;
+  $('timer').textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+},1000);
+
+// ── State ──
+function refresh(){
+  api('state').then(function(s){
+    EXAM_MIN=s.minutes;ELAPSED=s.elapsed;
+    if(s.advisory){$('banner').style.display='block';$('banner').textContent='⚠ '+s.advisory;}
+    var rows='',got=0,max=0;
+    s.questions.forEach(function(q,i){
+      got+=q.score;max+=q.weight;
+      rows+='<tr style="cursor:pointer" onclick="loadQ('+i+')">'
+        +'<td>'+(i+1)+'</td><td>'+q.id+'</td><td>'+q.domain+'</td>'
+        +'<td class="st-'+q.status+'">'+q.status+'</td>'
+        +'<td>'+q.score+'/'+q.weight+'</td><td>'+(q.hints_used||'-')+'</td></tr>';
+    });
+    $('qtable').innerHTML='<tr><th>#</th><th>id</th><th>domain</th><th>status</th><th>score</th><th>hints</th></tr>'+rows;
+    $('score').textContent=got.toFixed(1)+' / '+max;
+  }).catch(function(e){console.error('state error:',e)});
+}
+
+// ── Question ──
+function loadQ(i){
+  CUR=i;
+  api('question',{index:i}).then(function(d){
+    $('qmeta').textContent='Question '+(i+1)+' — domain: '+d.domain+' | weight: '+d.weight+'%';
+    $('qtext').textContent=d.question;
+    $('hints').innerHTML='';
+  });
+}
+function startQ(i){
+  if(i<0)return;
+  api('start',{index:i}).then(function(d){
+    $('qtext').textContent=d.question;
+    $('hints').innerHTML='';
+    refresh();
+  });
+}
+function askHint(level){
+  if(CUR<0)return;
+  api('hint',{index:CUR,level:level}).then(function(d){
+    var div=document.createElement('div');
+    div.className='hintbox';div.textContent=d.text;
+    $('hints').appendChild(div);
+    refresh();
+  });
+}
+function checkQ(){
+  if(CUR<0)return;
+  api('check',{index:CUR}).then(function(d){
+    var html='';
+    d.results.forEach(function(r){
+      html+='<div style="color:'+(r.passed?'#3ecf8e':'#ff6b6b')+'">'+(r.passed?'PASS':'FAIL')+' — '+r.detail+'</div>';
+    });
+    html+='<div><b>'+(d.passed?'SOLVED':'Not yet')+'</b> — score '+d.score+'/'+d.weight+'</div>';
+    $('hints').innerHTML+=('<div class="hintbox">'+html+'</div>');
+    if(d.passed){$('banner').style.display='block';$('banner').innerHTML='✅ SOLVED — '+d.score+'/'+d.weight+' points';}
+    refresh();showReport();
+  });
+}
+function skipQ(){
+  if(CUR<0)return;
+  api('skip',{index:CUR}).then(function(){refresh();showReport()});
+}
+function tagQ(){
+  if(CUR<0)return;
+  api('tag',{index:CUR}).then(function(d){
+    $('tagbtn').textContent=d.tagged?'★ Tagged':'★ Tag';
+    refresh();
+  });
+}
+function resetQ(){
+  if(CUR<0)return;
+  api('reset',{index:CUR}).then(function(d){
+    if(d.question){$('qtext').textContent=d.question;$('hints').innerHTML='';}
+    refresh();
+  });
+}
+
+// ── Terminal ──
+function runCmd(){
+  var c=$('cmd').value.trim();if(!c)return;
+  api('cmd',{command:c}).then(function(d){
+    $('out').textContent=(d.stdout||'')+(d.stderr||'')+(d.rc?'\n[exit '+d.rc+']':'');
+  });
+}
+
+// ── Report ──
+function showReport(){
+  api('report').then(function(d){
+    var cls=d.passed?'pass':'fail';
+    var html='<div class="bigscore '+cls+'">'+d.percent+'%</div>'
+      +'<div style="color:#8b99b0">'+d.earned.toFixed(1)+' / '+d.total+' — threshold '+d.threshold+'% — '+(d.passed?'PASS':'BELOW')+'</div>';
+    html+='<table><tr><th>domain</th><th>score</th><th>max</th></tr>';
+    d.domains.forEach(function(x){html+='<tr><td>'+x.domain+'</td><td>'+x.score.toFixed(1)+'</td><td>'+x.max+'</td></tr>'});
+    html+='</table>';
+    $('report').innerHTML=html;
+  });
+}
+
+// ── Cert switch ──
+function switchCert(cert){
+  document.querySelectorAll('header .certbtn').forEach(function(b){b.classList.remove('active')});
+  $('cert-'+cert).classList.add('active');
+  api('cert',{cert:cert,exam:'web-exam.yaml'}).then(function(d){
+    $('banner').style.display='block';
+    $('banner').textContent='Loaded '+cert.toUpperCase()+' — '+d.questions+' questions';
+    refresh();showReport();
+  });
+}
+
+// ── Modal ──
+function mCert(c){
+  MCERT=c;
+  ['cka','ckad','cks'].forEach(function(x){$('m-'+x).classList.remove('active')});
+  $('m-'+c).classList.add('active');
+}
+function startExam(){
+  var exam=$('m-exam').value;
+  $('modal').style.display='none';
+  document.querySelectorAll('header .certbtn').forEach(function(b){b.classList.remove('active')});
+  $('cert-'+MCERT).classList.add('active');
+  api('cert',{cert:MCERT,exam:exam}).then(function(d){
+    $('banner').style.display='block';
+    $('banner').textContent=MCERT.toUpperCase()+' / '+exam+' — '+d.questions+' questions loaded';
+    refresh();showReport();
+  });
+}
+
+// ── Cheatsheet ──
+function loadCheats(){
+  api('cheatsheet').then(function(d){
+    var html='';
+    (d.research_methods||[]).forEach(function(c){
+      html+='<div class="cheat"><b>'+c.need+'</b><code>'+c.how+'</code><span style="color:#8b99b0">'+c.note+'</span></div>';
+    });
+    $('cheats').innerHTML=html;
+  });
+}
+
+// ── Docs ──
+function loadDocs(){
+  var links=[
+    ['kubectl Cheat Sheet','https://kubernetes.io/docs/reference/kubectl/cheatsheet/'],
+    ['JSONPath','https://kubernetes.io/docs/reference/kubectl/jsonpath/'],
+    ['Pods','https://kubernetes.io/docs/concepts/workloads/pods/'],
+    ['Services','https://kubernetes.io/docs/concepts/services-networking/service/'],
+    ['NetworkPolicies','https://kubernetes.io/docs/concepts/services-networking/network-policies/'],
+    ['PV/PVC','https://kubernetes.io/docs/concepts/storage/persistent-volumes/'],
+    ['ConfigMaps','https://kubernetes.io/docs/concepts/configuration/configmap/'],
+    ['Secrets','https://kubernetes.io/docs/concepts/configuration/secret/'],
+    ['RBAC','https://kubernetes.io/docs/reference/access-authn-authz/rbac/'],
+    ['kubeadm upgrade','https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/']
+  ];
+  var html='';
+  links.forEach(function(l){html+='<a href="'+l[1]+'" target="_blank" rel="noopener">'+l[0]+' ↗</a>'});
+  $('doclist').innerHTML=html;
+}
+
+// ── Init ──
+refresh();loadCheats();loadDocs();
+</script>
+</body>
+</html>

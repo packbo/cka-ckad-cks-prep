@@ -680,6 +680,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _serve_static(self):
+        """Serve the static index.html from cka_sim/static/."""
+        import pathlib
+        static_dir = pathlib.Path(__file__).parent / "static"
+        html_file = static_dir / "index.html"
+        if not html_file.exists():
+            self._html("<h1>cka-sim web</h1><p>static/index.html not found</p>")
+            return
+        body = html_file.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _html(self, text):
         body = text.encode()
         self.send_response(200)
@@ -690,7 +705,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path in ("/", "/index.html"):
-            self._html(build_html())
+            self._serve_static()
         elif self.path == "/api/state":
             self._json(STATE.public())
         elif self.path == "/api/report":
@@ -796,10 +811,11 @@ class Handler(BaseHTTPRequestHandler):
         if q is None:
             return self._json({"error": "bad index"}, 400)
         s = q["scenario"]
+        from cka_sim import env as _env
+        from cka_sim.validator import _evaluate_once
         results = []
         for a in load_assertions(s):
-            from cka_sim.validator import evaluate
-            r = evaluate(a)
+            r = _evaluate_once(a)  # single-pass: no settle-retry for web
             results.append({"passed": r.passed, "detail": r.detail})
         passed = bool(results) and all(r["passed"] for r in results)
         if passed and q["status"] != "solved":
