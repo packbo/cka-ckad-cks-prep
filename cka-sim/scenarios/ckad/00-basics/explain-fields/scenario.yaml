@@ -8,7 +8,7 @@ setup:
   apply: setup.yaml
 question: |
   Mission : créer le Pod `pinned` (namespace `basics2`, image `nginx:1.21`)
-  placé DIRECTEMENT sur le nœud `cka-sim-worker` — sans scheduler, grâce au
+  placé DIRECTEMENT sur le nœud `%WORKER%` — sans scheduler, grâce au
   champ `spec.nodeName`.
 
   Étapes conseillées (c'est la méthode qui compte) :
@@ -22,12 +22,12 @@ hints:
   - level: 2
     text: "kubectl explain pod.spec --recursive | grep -i node  révèle nodeName (type string). Génère la base : kubectl run pinned --image=nginx:1.21 -n basics2 $do > /tmp/p.yaml"
   - level: 3
-    text: "nodeName se place sous spec, au même niveau que containers. Ajoute-le (ex: sed -i '/^spec:/a\\  nodeName: cka-sim-worker' /tmp/p.yaml) puis kubectl apply -f /tmp/p.yaml"
+    text: "nodeName se place sous spec, au même niveau que containers. Ajoute-le (ex: sed -i '/^spec:/a\\  nodeName: %WORKER%' /tmp/p.yaml) puis kubectl apply -f /tmp/p.yaml"
   - level: solution
-    text: "kubectl run pinned --image=nginx:1.21 -n basics2 $do > /tmp/p.yaml && sed -i '/^spec:/a\\  nodeName: cka-sim-worker' /tmp/p.yaml && kubectl apply -f /tmp/p.yaml && kubectl get pod pinned -n basics2 -o wide"
+    text: "kubectl run pinned --image=nginx:1.21 -n basics2 $do > /tmp/p.yaml && sed -i '/^spec:/a\\  nodeName: %WORKER%' /tmp/p.yaml && kubectl apply -f /tmp/p.yaml && kubectl get pod pinned -n basics2 -o wide"
 check:
   assertions:
     - run: "kubectl get pod pinned -n basics2 -o jsonpath='{.spec.nodeName}'"
-      equals: "cka-sim-worker"
+      equals: "%WORKER%"
     - run: "kubectl get pod pinned -n basics2 -o jsonpath='{.status.phase}'"
       equals: "Running"

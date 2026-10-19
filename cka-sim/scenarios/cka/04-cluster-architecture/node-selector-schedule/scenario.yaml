@@ -3,6 +3,7 @@ title: "Pin a workload to a labeled node"
 domain: cluster-architecture
 weight: 4
 difficulty: medium
+requires: {workers: 1}
 time_estimate: 300
 setup:
   apply: setup.yaml

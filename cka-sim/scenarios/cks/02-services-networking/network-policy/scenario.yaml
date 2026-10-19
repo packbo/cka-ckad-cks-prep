@@ -1,0 +1,38 @@
+id: network-policy
+title: "Deny all ingress to db pods"
+domain: services-networking
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `secure`, create a NetworkPolicy named `db-deny-ingress`
+  that selects pods labeled `role=db` and denies ALL ingress traffic to them.
+hints:
+  - level: 1
+    text: "NetworkPolicy manifests are verbose — copy the template from kubernetes.io/docs/concepts/services-networking/network-policies/ (allowed during the exam) and adapt it."
+  - level: 2
+    text: "Key concept: once a policy with policyTypes: [Ingress] selects a pod, all ingress is denied unless rules allow it. An empty ingress: [] means DENY ALL ingress."
+  - level: 3
+    text: "apiVersion: networking.k8s.io/v1, kind: NetworkPolicy, podSelector.matchLabels.role=db, policyTypes: [Ingress], ingress: []"
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: networking.k8s.io/v1
+      kind: NetworkPolicy
+      metadata:
+        name: db-deny-ingress
+        namespace: secure
+      spec:
+        podSelector:
+          matchLabels:
+            role: db
+        policyTypes: [Ingress]
+      EOF
+check:
+  assertions:
+    - run: "kubectl get networkpolicy db-deny-ingress -n secure -o jsonpath='{.spec.podSelector.matchLabels.role}'"
+      equals: "db"
+    - run: "kubectl get networkpolicy db-deny-ingress -n secure -o jsonpath='{.spec.policyTypes}'"
+      contains: "Ingress"

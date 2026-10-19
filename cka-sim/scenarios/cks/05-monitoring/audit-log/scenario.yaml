@@ -1,0 +1,43 @@
+id: audit-log
+title: "Enable API server audit logging"
+domain: monitoring
+weight: 5
+difficulty: hard
+requires: {node_exec: true}
+time_estimate: 480
+setup:
+  apply: setup.yaml
+question: |
+  Enable Kubernetes audit logging on the control plane (kind node
+  `%CP%`):
+
+  1. Write an audit policy (level `Metadata` for everything) to
+     `/etc/kubernetes/audit-policy.yaml` on the node.
+  2. Make the API server load it and log to stdout
+     (`--audit-policy-file` + `--audit-log-path=-`) by editing its
+     static-pod manifest.
+hints:
+  - level: 1
+    text: "The API server is a static pod: its manifest lives in /etc/kubernetes/manifests/kube-apiserver.yaml ON THE NODE — edit it through docker exec / %CPCP%."
+  - level: 2
+    text: "Policy (apiVersion audit.k8s.io/v1, kind Policy, rules: [{level: Metadata}]). Backup first: %NODEEXEC% cp /etc/kubernetes/manifests/kube-apiserver.yaml /root/kube-apiserver.yaml.bak"
+  - level: 3
+    text: "Insert flags after the '  - kube-apiserver' line: %NODEEXEC% sed -i 's|^  - kube-apiserver$|  - kube-apiserver\\n  - --audit-policy-file=/etc/kubernetes/audit-policy.yaml\\n  - --audit-log-path=-|' /etc/kubernetes/manifests/kube-apiserver.yaml — the pod restarts automatically; wait for it."
+  - level: solution
+    text: |
+      cat > /tmp/audit-policy.yaml <<EOF
+      apiVersion: audit.k8s.io/v1
+      kind: Policy
+      rules:
+      - level: Metadata
+      EOF
+      %CPCP% /tmp/audit-policy.yaml %CPDEST%/etc/kubernetes/audit-policy.yaml
+      %NODEEXEC% sed -i 's|^  - kube-apiserver$|  - kube-apiserver\n  - --audit-policy-file=/etc/kubernetes/audit-policy.yaml\n  - --audit-log-path=-|' /etc/kubernetes/manifests/kube-apiserver.yaml
+      kubectl -n kube-system wait --for=condition=Ready pod/kube-apiserver-%CP% --timeout=120s
+      kubectl get ns   # generates audited requests
+check:
+  assertions:
+    - run: "%NODEEXEC% grep -c -- --audit-policy-file /etc/kubernetes/manifests/kube-apiserver.yaml"
+      equals: "1"
+    - run: "docker logs %CP% 2>&1 | grep -q 'audit.k8s.io' && echo auditing"
+      contains: "auditing"

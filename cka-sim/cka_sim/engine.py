@@ -7,7 +7,7 @@ from typing import List, Optional
 
 import yaml
 
-from cka_sim import cheatsheet, completion, review, ui
+from cka_sim import cheatsheet, completion, env, review, ui
 from cka_sim.cluster import ClusterBackend, run_shell
 from cka_sim.hints import PENALTY, show_hint
 from cka_sim.paths import scenarios_dir
@@ -47,8 +47,10 @@ class Scenario:
     question: str
     hints: list = field(default_factory=list)
     setup_apply: Optional[str] = None
+    setup_script: list = field(default_factory=list)
     time_estimate: int = 180
     path: str = ""
+    requires: Optional[dict] = None
 
     @property
     def setup_fullpath(self) -> Optional[str]:
@@ -92,8 +94,10 @@ def _load(path: str) -> Scenario:
         question=data.get("question", "").strip(),
         hints=data.get("hints", []) or [],
         setup_apply=setup.get("apply"),
+        setup_script=list(setup.get("script") or []),
         time_estimate=int(data.get("time_estimate", 180)),
         path=path,
+        requires=data.get("requires") or None,
     )
 
 
@@ -102,7 +106,8 @@ def _score_of(scenario: Scenario, hints_used: int) -> float:
     return round(max(0.0, scenario.weight * (1.0 - pen)), 2)
 
 
-def _setup(scenario: Scenario, backend: ClusterBackend) -> None:
+def _setup(scenario: Scenario, backend: ClusterBackend) -> bool:
+    """Apply setup manifests + run break/fix script. Returns False on fatal setup failure."""
     sp = scenario.setup_fullpath
     if sp and os.path.exists(sp):
         ui.info(f"[setup] resetting + applying {os.path.basename(sp)} ...")
@@ -116,6 +121,18 @@ def _setup(scenario: Scenario, backend: ClusterBackend) -> None:
         )
         _wait_namespaces_gone(sp)
         backend.apply_file(sp)
+    if scenario.setup_script:
+        ui.info("[setup] preparing (break/fix) environment ...")
+        for n, cmd in enumerate(scenario.setup_script, 1):
+            cp = run_shell(env.substitute(cmd), timeout=180)
+            if cp.returncode != 0:
+                ui.warn(f"[setup] step {n}/{len(scenario.setup_script)} FAILED — scenario aborted")
+                if cp.stdout.strip():
+                    ui.out(cp.stdout.strip()[-200:])
+                if cp.stderr.strip():
+                    ui.out(cp.stderr.strip()[-200:])
+                return False
+    return True
 
 
 def _wait_namespaces_gone(setup_path: str, timeout_s: int = 30) -> None:
@@ -174,9 +191,11 @@ def run_scenario(
     if scenario.id in setup_done:
         ui.info("[setup] skipped — question re-entered, your changes are kept  (:reset to start over)")
     else:
-        _setup(scenario, backend)
+        if not _setup(scenario, backend):
+            ui.warn("fix the cluster (or rerun) before attempting this scenario")
+            return ScenarioResult(scenario, False, 0.0, 0, skipped=True)
         setup_done.add(scenario.id)
-    ui.question(scenario.question)
+    ui.question(env.substitute(scenario.question))
     ui.info("meta:  :hint <1-4>  :check [n]  :cheat  :question  :reset  :tag  :back  :goto <n>  :solution  :skip  :exit")
     print()
 
@@ -221,7 +240,7 @@ def run_scenario(
                 cheatsheet.show(parts[1] if len(parts) > 1 else None)
             elif cmd in (":question", ":show"):
                 # re-display the question when the terminal has scrolled past it
-                ui.question(scenario.question)
+                ui.question(env.substitute(scenario.question))
             elif cmd == ":reset":
                 # explicit re-apply of the scenario setup (navigation never resets)
                 _setup(scenario, backend)
@@ -256,7 +275,7 @@ def run_scenario(
                 ui.warn(f"unknown meta-command: {cmd}")
             continue
 
-        expanded = completion.expand_command(raw)
+        expanded = completion.expand_command(env.substitute(raw))
         if expanded != raw:
             ui.info(f"→ {expanded}")
         try:

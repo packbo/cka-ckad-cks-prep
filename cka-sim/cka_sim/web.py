@@ -55,6 +55,8 @@ class ExamState:
         self.questions = []      # dicts: scenario + status/score/hints
         self.minutes = 0
         self.threshold = 66
+        self.advisory = ""
+        self.env = {"nodes": 0, "workers": 0}
 
     def load(self) -> None:
         exam_path = EXAM_FILE if os.path.isabs(EXAM_FILE) else os.path.join(EXAMS_ROOT, EXAM_FILE)
@@ -63,11 +65,17 @@ class ExamState:
         self.minutes = int(exam.get("minutes", 120))
         self.threshold = int(exam.get("threshold", 66))
         by_id = {s.id: s for s in load_scenarios()}
+        from cka_sim import env as _env
+        e = _env.detect()
+        self.advisory = _env.advisory(e)
+        self.env = {"nodes": e["nodes"], "workers": len(e["workers"])}
         self.questions = []
         for sid in exam.get("scenarios", []):
             s = by_id.get(sid)
             if s is None:
                 continue
+            if _env.unmet_requires(s.requires, e):
+                continue  # does not fit this environment (no docker in pod, single-node, ...)
             self.questions.append({
                 "scenario": s,
                 "status": "pending",
@@ -84,6 +92,8 @@ class ExamState:
                 "minutes": self.minutes,
                 "threshold": self.threshold,
                 "elapsed": self.elapsed(),
+                "advisory": self.advisory,
+                "env": self.env,
                 "questions": [
                     {
                         "index": i,
@@ -390,6 +400,7 @@ async function api(path,body){
 
 async function refresh(){const s=await api('state');renderState(s);}
 function renderState(s){
+  if(s.advisory){showBanner('⚠ '+s.advisory);}
   let got=0,max=0;
   const rows=s.questions.map(q=>{got+=q.score;max+=q.weight;
     return `<tr style="cursor:pointer" onclick="loadQ(${q.index})">
@@ -611,20 +622,22 @@ class Handler(BaseHTTPRequestHandler):
         if s.setup_fullpath and os.path.exists(s.setup_fullpath):
             run_shell(f"kubectl apply -f {s.setup_fullpath}")
         q["status"] = "active"
-        return self._json({"ok": True, "question": s.question})
+        from cka_sim import env as _env
+        return self._json({"ok": True, "question": _env.substitute(s.question)})
 
     def _api_question(self, data):
         i, q = self._q(data)
         if q is None:
             return self._json({"error": "bad index"}, 400)
+        from cka_sim import env as _env
         s = q["scenario"]
         shown = []
         for h in s.hints:
             lvl = h.get("level")
             lvl_n = 4 if isinstance(lvl, str) else int(lvl)
             if lvl_n <= q["hints_used"]:
-                shown.append(h.get("text", ""))
-        return self._json({"question": s.question, "hint_logs": shown})
+                shown.append(_env.substitute(h.get("text", "")))
+        return self._json({"question": _env.substitute(s.question), "hint_logs": shown})
 
     def _api_cmd(self, data):
         cmd = str(data.get("command", ""))
@@ -644,7 +657,8 @@ class Handler(BaseHTTPRequestHandler):
             lvl_n = 4 if isinstance(lvl, str) else int(lvl)
             if lvl_n == level:
                 q["hints_used"] = max(q["hints_used"], level)
-                return self._json({"text": h.get("text", ""), "penalty": PENALTY.get(level, 0)})
+                from cka_sim import env as _env
+                return self._json({"text": _env.substitute(h.get("text", "")), "penalty": PENALTY.get(level, 0)})
         return self._json({"text": "no hint at this level", "penalty": 0})
 
     def _api_check(self, data):

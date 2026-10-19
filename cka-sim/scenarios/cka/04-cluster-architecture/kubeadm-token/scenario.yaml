@@ -3,6 +3,7 @@ title: "Manage bootstrap tokens with kubeadm"
 domain: cluster-architecture
 weight: 2
 difficulty: medium
+requires: {node_exec: true}
 time_estimate: 180
 setup:
   apply: setup.yaml
@@ -11,16 +12,16 @@ question: |
   join the cluster (`kubeadm join` style).
 hints:
   - level: 1
-    text: "kubeadm runs INSIDE the control-plane container here: docker exec cka-sim-control-plane kubeadm ..."
+    text: "kubeadm runs INSIDE the control-plane container here: %NODEEXEC% kubeadm ..."
   - level: 2
     text: "kubeadm token create makes the token; kubeadm token list shows them (output is TOKEN, TTL, EXPIRES, USES...)."
   - level: 3
-    text: "docker exec cka-sim-control-plane kubeadm token create  then verify: docker exec cka-sim-control-plane kubeadm token list — your token must appear with a remaining TTL."
+    text: "%NODEEXEC% kubeadm token create  then verify: %NODEEXEC% kubeadm token list — your token must appear with a remaining TTL."
   - level: solution
     text: |
-      docker exec cka-sim-control-plane kubeadm token create
-      docker exec cka-sim-control-plane kubeadm token list
+      %NODEEXEC% kubeadm token create
+      %NODEEXEC% kubeadm token list
 check:
   assertions:
-    - run: "docker exec cka-sim-control-plane sh -c 'kubeadm token list | tail -n +2 | wc -l'"
+    - run: "%NODEEXEC% sh -c 'kubeadm token list | tail -n +2 | wc -l'"
       equals: "1"

@@ -1,0 +1,54 @@
+id: harden-pod
+title: "Harden a Pod (runAsNonRoot, RO rootfs, no privilege escalation)"
+domain: security
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `hard`, create pod `secure-shell` (image `busybox:1.36`,
+  command `sh -c "sleep 3600"`) with:
+
+  - `runAsNonRoot: true` + `runAsUser: 65534` (pod securityContext)
+  - container `readOnlyRootFilesystem: true`
+  - `allowPrivilegeEscalation: false`
+  - capabilities: drop `ALL`
+hints:
+  - level: 1
+    text: "Two securityContext spots: pod-level (spec.securityContext) and container-level (containers[].securityContext)."
+  - level: 2
+    text: "Discover the fields: kubectl explain pod.spec.securityContext --recursive  and  kubectl explain pod.spec.containers.securityContext --recursive"
+  - level: 3
+    text: "runAsNonRoot+runAsUser live at pod level (image must actually run as non-root: 65534=nobody); readOnlyRootFilesystem / allowPrivilegeEscalation / capabilities are container level. busybox tolerates a read-only root filesystem."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: v1
+      kind: Pod
+      metadata: { name: secure-shell, namespace: hard }
+      spec:
+        securityContext: { runAsNonRoot: true, runAsUser: 65534 }
+        containers:
+        - name: shell
+          image: busybox:1.36
+          command: ["sh","-c","sleep 3600"]
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.spec.securityContext.runAsNonRoot}'"
+      equals: "true"
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.spec.securityContext.runAsUser}'"
+      equals: "65534"
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.spec.containers[0].securityContext.readOnlyRootFilesystem}'"
+      equals: "true"
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.spec.containers[0].securityContext.allowPrivilegeEscalation}'"
+      equals: "false"
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.spec.containers[0].securityContext.capabilities.drop[0]}'"
+      equals: "ALL"
+    - run: "kubectl get pod secure-shell -n hard -o jsonpath='{.status.phase}'"
+      equals: "Running"

@@ -1,0 +1,24 @@
+id: sa-automount
+title: "Disable ServiceAccount token automount (CKS)"
+domain: security
+weight: 3
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `cksec`, create a ServiceAccount named `minimal` that does NOT
+  auto-mount its API credentials in pods (`automountServiceAccountToken: false`).
+hints:
+  - level: 1
+    text: "Start from the generator and edit: kubectl create sa minimal -n cksec $do"
+  - level: 2
+    text: "The field sits at the top of the SA spec: kubectl explain sa.automountServiceAccountToken"
+  - level: 3
+    text: "This is a CKS classic: the token won't be projected into pods using this SA. Verify: kubectl get sa minimal -n cksec -o yaml"
+  - level: solution
+    text: "kubectl create sa minimal -n cksec $do > sa.yaml && sed -i 's/secrets:/automountServiceAccountToken: false\\nsecrets:/' sa.yaml && kubectl apply -f sa.yaml"
+check:
+  assertions:
+    - run: "kubectl get sa minimal -n cksec -o jsonpath='{.automountServiceAccountToken}'"
+      equals: "false"

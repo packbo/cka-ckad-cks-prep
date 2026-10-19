@@ -3,9 +3,10 @@ title: "Node maintenance: drain then uncordon"
 domain: cluster-architecture
 weight: 4
 difficulty: medium
+requires: {workers: 1}
 time_estimate: 240
 question: |
-  Simulate maintenance on node `cka-sim-worker2`:
+  Simulate maintenance on node `%WORKER%2`:
 
   1. Drain it safely (the cluster runs DaemonSets — drain will refuse without a flag).
   2. Once drained, bring it back: uncordon it.
@@ -15,14 +16,14 @@ hints:
   - level: 1
     text: "kubectl drain <node> evicts pods; it protects you with errors — read them, they name the exact missing flags."
   - level: 2
-    text: "DaemonSet pods cannot be evicted: kubectl drain cka-sim-worker2 --ignore-daemonsets . A pod may also need --delete-emptydir-data."
+    text: "DaemonSet pods cannot be evicted: kubectl drain %WORKER%2 --ignore-daemonsets . A pod may also need --delete-emptydir-data."
   - level: 3
-    text: "Drain cordons automatically. Bringing the node back: kubectl uncordon cka-sim-worker2 . Verify: kubectl get node cka-sim-worker2 (Ready, no SchedulingDisabled)."
+    text: "Drain cordons automatically. Bringing the node back: kubectl uncordon %WORKER%2 . Verify: kubectl get node %WORKER%2 (Ready, no SchedulingDisabled)."
   - level: solution
-    text: "kubectl drain cka-sim-worker2 --ignore-daemonsets --delete-emptydir-data && kubectl uncordon cka-sim-worker2"
+    text: "kubectl drain %WORKER%2 --ignore-daemonsets --delete-emptydir-data && kubectl uncordon %WORKER%2"
 check:
   assertions:
-    - run: "kubectl get node cka-sim-worker2 -o jsonpath='{.spec.unschedulable}'"
+    - run: "kubectl get node %WORKER%2 -o jsonpath='{.spec.unschedulable}'"
       equals: ""
-    - run: "kubectl get node cka-sim-worker2 -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+    - run: "kubectl get node %WORKER%2 -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
       equals: "True"

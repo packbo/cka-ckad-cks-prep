@@ -1,0 +1,32 @@
+id: psa-namespace
+title: "Enforce Pod Security Admission on a namespace (CKS)"
+domain: security
+weight: 4
+difficulty: medium
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  Namespace `psa-ns` exists. Label it to enforce the `restricted` Pod Security
+  standard, pinned to the latest version, and also `warn` on `restricted`:
+
+  - `pod-security.kubernetes.io/enforce=restricted`
+  - `pod-security.kubernetes.io/enforce-version=latest`
+  - `pod-security.kubernetes.io/warn=restricted`
+hints:
+  - level: 1
+    text: "PSA is configured with plain namespace LABELS — kubectl label ns."
+  - level: 2
+    text: "kubernetes.io → 'Pod Security Admission' → the page lists the exact label names; they all start with pod-security.kubernetes.io/"
+  - level: 3
+    text: "Pitfall: overwrite semantics — use kubectl label ns psa-ns --overwrite ... if labels exist. Test enforcement: a privileged pod in psa-ns now gets rejected."
+  - level: solution
+    text: "kubectl label ns psa-ns --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest pod-security.kubernetes.io/warn=restricted"
+check:
+  assertions:
+    - run: "kubectl get ns psa-ns -o json | jq -r '.metadata.labels[\"pod-security.kubernetes.io/enforce\"]'"
+      equals: "restricted"
+    - run: "kubectl get ns psa-ns -o json | jq -r '.metadata.labels[\"pod-security.kubernetes.io/enforce-version\"]'"
+      equals: "latest"
+    - run: "kubectl get ns psa-ns -o json | jq -r '.metadata.labels[\"pod-security.kubernetes.io/warn\"]'"
+      equals: "restricted"

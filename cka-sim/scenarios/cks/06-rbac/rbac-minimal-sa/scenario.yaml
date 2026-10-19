@@ -1,0 +1,35 @@
+id: rbac-minimal-sa
+title: "Least-privilege ServiceAccount (verify with auth can-i)"
+domain: rbac
+weight: 4
+difficulty: medium
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `hard`, create ServiceAccount `auditor` with the SMALLEST
+  possible permissions: `get` and `list` on `configmaps` only.
+
+  Prove the least privilege with `kubectl auth can-i`.
+hints:
+  - level: 1
+    text: "Three objects: a Role (verbs+resource), a RoleBinding, a ServiceAccount — all have kubectl create generators."
+  - level: 2
+    text: "kubectl create role auditor-cm --verb=get,list --resource=configmaps -n hard ; kubectl create rolebinding auditor-bind --role=auditor-cm --serviceaccount=hard:auditor -n hard"
+  - level: 3
+    text: "Verify as the SA: kubectl auth can-i get configmaps -n hard --as=system:serviceaccount:hard:auditor  (yes) and ... list pods ... (must be no)."
+  - level: solution
+    text: |
+      kubectl create sa auditor -n hard
+      kubectl create role auditor-cm --verb=get,list --resource=configmaps -n hard
+      kubectl create rolebinding auditor-bind --role=auditor-cm --serviceaccount=hard:auditor -n hard
+      kubectl auth can-i get configmaps -n hard --as=system:serviceaccount:hard:auditor
+      kubectl auth can-i list pods -n hard --as=system:serviceaccount:hard:auditor
+check:
+  assertions:
+    - run: "kubectl auth can-i get configmaps -n hard --as=system:serviceaccount:hard:auditor"
+      equals: "yes"
+    - run: "kubectl auth can-i list pods -n hard --as=system:serviceaccount:hard:auditor || true"
+      equals: "no"
+    - run: "kubectl auth can-i create pods -n hard --as=system:serviceaccount:hard:auditor || true"
+      equals: "no"

@@ -3,6 +3,7 @@ title: "Taint a worker node"
 domain: cluster-architecture
 weight: 3
 difficulty: easy
+requires: {workers: 1}
 time_estimate: 150
 question: |
   Find the FIRST worker node of the cluster and add the taint
@@ -17,10 +18,10 @@ hints:
   - level: 3
     text: "Pitfall: the effect goes after a colon: workload=test:NoSchedule . Verify: kubectl describe node <worker> | grep -i taint"
   - level: solution
-    text: "kubectl taint node cka-sim-worker workload=test:NoSchedule"
+    text: "kubectl taint node %WORKER% workload=test:NoSchedule"
 check:
   assertions:
-    - run: "kubectl get node cka-sim-worker -o jsonpath='{.spec.taints[*].key}'"
+    - run: "kubectl get node %WORKER% -o jsonpath='{.spec.taints[*].key}'"
       contains: "workload"
-    - run: "kubectl get node cka-sim-worker -o jsonpath='{.spec.taints[*].effect}'"
+    - run: "kubectl get node %WORKER% -o jsonpath='{.spec.taints[*].effect}'"
       contains: "NoSchedule"

@@ -7,7 +7,7 @@ import sys
 
 import yaml
 
-from cka_sim import paths, review, ui
+from cka_sim import env, paths, review, ui
 from cka_sim.cluster import KindBackend, kind_installed, kubectl_installed, run_shell
 from cka_sim.engine import (
     CheckRequest,
@@ -32,15 +32,34 @@ def cmd_list(args):
         ui.warn(f"no scenarios found in {paths.scenarios_dir()}/")
         ui.info("drop them as scenarios/<cert>/<domain>/<id>/scenario.yaml (same format as CKA)")
         return
+    if args.domain:
+        scen = [s for s in scen if args.domain.lower() in s.domain.lower()]
+        if not scen:
+            ui.warn(f"no scenarios in domain '{args.domain}'")
+            domains = sorted(set(s.domain for s in load_scenarios()))
+            ui.info("available domains: " + ", ".join(domains))
+            return
+    e = env.detect()
     n_tagged = sum(1 for s in scen if review.is_tagged(s.id))
     print(f"{'id':28} {'domain':22} {'weight':>6} {'diff':8} title")
     print("-" * 96)
+    n_unfit = 0
     for s in scen:
         star = " ★" if review.is_tagged(s.id) else ""
+        unfit = env.unmet_requires(s.requires, e)
+        if unfit:
+            n_unfit += 1
+            star += "  !"
         print(f"{s.id:28} {s.domain:22} {s.weight:>6} {s.difficulty:8} {s.title}{star}")
+    print("-" * 96)
     if n_tagged:
-        print("-" * 96)
         ui.info(f"{n_tagged} tagged for review  →  ./run.sh tagged  |  ./run.sh review")
+    if n_unfit:
+        ui.warn(f"{n_unfit} scenario(s) marked '!' do not fit this environment "
+                f"({e['nodes']} node(s), {len(e['workers'])} worker(s)) — auto-skipped in exams")
+    adv = env.advisory(e)
+    if adv:
+        ui.warn(adv)
 
 
 def _require_ready():
@@ -51,14 +70,21 @@ def _require_ready():
 
 
 def cmd_run(args):
-    if not _require_ready():
-        return
     scen = {s.id: s for s in load_scenarios()}
     if args.id not in scen:
+        if not backend.ready():
+            ui.warn("cluster not ready. Run:  ./run.sh up")
+            return
         ui.warn(f"unknown scenario '{args.id}'. Available:")
         for k in scen:
             print("  " + k)
         return
+    if not backend.ready() and not scen[args.id].setup_script:
+        # break/fix scenarios (setup.script) are MEANT to start on a broken cluster
+        ui.warn("cluster not ready. Run:  ./run.sh up")
+        return
+    for reason in env.unmet_requires(scen[args.id].requires):
+        ui.warn(f"this scenario does not fit this environment: {reason}")
     try:
         run_scenario(scen[args.id], backend)
     except SessionExit:
@@ -117,6 +143,26 @@ def _session_loop(ids, minutes=None):
         ui.warn(f"scenario '{m}' missing — skipped")
     if not seq:
         ui.warn("nothing to run")
+        return
+
+    # adapt the exam to the actual environment (nodes, docker, node access)
+    e = env.detect()
+    adv = env.advisory(e)
+    if adv:
+        ui.warn(adv)
+    adapted = []
+    fit = []
+    for sid in seq:
+        reasons = env.unmet_requires(all_scen[sid].requires, e)
+        if reasons:
+            adapted.append((sid, reasons))
+        else:
+            fit.append(sid)
+    for sid, reasons in adapted:
+        ui.warn(f"adapted: '{sid}' skipped here ({'; '.join(reasons)})")
+    seq = fit
+    if not seq:
+        ui.warn("no scenario fits this environment — see ./run.sh list (! markers)")
         return
 
     timer = Timer()
@@ -265,6 +311,11 @@ def cmd_status(args):
     if backend.ready():
         mode = "kind (local)" if ctx.startswith("kind-") else "existing cluster (Killercoda/managed)"
         print("cluster: ", f"ready — {mode}")
+        e = env.detect()
+        print("nodes:   ", f"{e['nodes']} (control-plane: {e['cp'] or '?'}, workers: {len(e['workers'])})")
+        adv = env.advisory(e)
+        if adv:
+            print("         ", "⚠ " + adv)
     else:
         print("cluster: ", "not running")
 
@@ -341,7 +392,9 @@ def build_parser():
                    help="certification bank to use (default: $CKA_SIM_CERT or 'cka')")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("list", help="list available scenarios (★ = tagged for review)").set_defaults(func=cmd_list)
+    sp = sub.add_parser("list", help="list scenarios (--domain to filter)")
+    sp.add_argument("--domain", default=None, help="filter by domain substring (e.g. workloads, storage, rbac)")
+    sp.set_defaults(func=cmd_list)
     sp = sub.add_parser("run", help="run a single scenario")
     sp.add_argument("id")
     sp.set_defaults(func=cmd_run)

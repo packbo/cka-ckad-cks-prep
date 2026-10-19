@@ -43,8 +43,10 @@ def evaluate(assertion: dict) -> AssertionResult:
 
 
 def _evaluate_once(assertion: dict) -> AssertionResult:
+    from cka_sim import env as _env
+
     if "run" in assertion:
-        cp = run_shell(assertion["run"])
+        cp = run_shell(_env.substitute(assertion["run"]))
         value = (cp.stdout or "").strip()
         if cp.returncode != 0:
             return AssertionResult(False, f"command failed: {cp.stderr.strip()[:120]}")

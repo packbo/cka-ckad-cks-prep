@@ -1,0 +1,34 @@
+id: fix-apiserver
+title: "The cluster is DOWN: repair the API server"
+domain: troubleshooting
+weight: 6
+difficulty: hard
+time_estimate: 480
+requires: {node_exec: true}
+setup:
+  script:
+    - "%NODEEXEC% cp /etc/kubernetes/manifests/kube-apiserver.yaml /root/kube-apiserver.yaml.bak"
+    - "%NODEEXEC% sed -i 's|--client-ca-file=/etc/kubernetes/pki/ca.crt|--client-ca-file=/etc/kubernetes/pki/ca-BROKEN.crt|' /etc/kubernetes/manifests/kube-apiserver.yaml"
+question: |
+  The cluster just went DOWN: every `kubectl` command fails.
+
+  Diagnose the control plane and repair the API server.
+hints:
+  - level: 1
+    text: "The API server is a static pod on the control-plane node — when it crashloops, kubectl dies. Look at ITS logs: %AUDITLOG% | tail -20  (or docker logs %CP%)"
+  - level: 2
+    text: "The log says it cannot load a CA file. Compare the static-pod manifest against the backup kept on the node: %NODEEXEC% diff /root/kube-apiserver.yaml.bak /etc/kubernetes/manifests/kube-apiserver.yaml"
+  - level: 3
+    text: "Restore the manifest and let kubelet recreate the pod (allow ~60s): %NODEEXEC% cp /root/kube-apiserver.yaml.bak /etc/kubernetes/manifests/kube-apiserver.yaml ; then kubectl -n kube-system wait --for=condition=Ready pod/kube-apiserver-%CP% --timeout=120s"
+  - level: solution
+    text: |
+      %AUDITLOG% | tail -20                  # find the failing flag
+      %NODEEXEC% diff /root/kube-apiserver.yaml.bak /etc/kubernetes/manifests/kube-apiserver.yaml
+      %NODEEXEC% cp /root/kube-apiserver.yaml.bak /etc/kubernetes/manifests/kube-apiserver.yaml
+      kubectl -n kube-system wait --for=condition=Ready pod/kube-apiserver-%CP% --timeout=120s
+check:
+  assertions:
+    - run: "kubectl -n kube-system wait --for=condition=Ready pod/kube-apiserver-%CP% --timeout=60s && echo apiserver-up"
+      contains: "apiserver-up"
+    - run: "%NODEEXEC% grep -c -- --client-ca-file=/etc/kubernetes/pki/ca.crt /etc/kubernetes/manifests/kube-apiserver.yaml"
+      equals: "1"

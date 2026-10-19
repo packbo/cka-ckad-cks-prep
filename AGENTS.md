@@ -75,3 +75,59 @@ L'IA peut créer des scénarios en respectant le format ci-dessus, puis :
 
 Voir `killercoda/README.md`. Le point d'entrée est `killercoda/bootstrap.sh`
 (idempotent : kubectl + kind + cluster + ce dépôt cloné dans `/root/cka-ckad-cks-prep`).
+
+## Examen adaptatif piloté par IA (mode tutorat évolué)
+
+L'IA a **accès total au cluster** (via kubectl) et au simulateur (`./run.sh`).
+Elle peut générer un examen sur une thématique choisie, vérifier les résultats
+en direct, et s'adapter.
+
+### Protocole
+
+1. **L'utilisateur choisit une thématique** (ex: "storage", "networking",
+   "troubleshooting", "tout") et éventuellement un niveau.
+2. **L'IA sélectionne les scénarios** :
+   ```bash
+   ./run.sh --cert cka list --domain storage    # voir les scénarios dispo
+   ./run.sh --cert cka run <id>                  # lancer un scénario
+   ```
+3. **Pendant le scénario**, l'IA suit les règles d'indices (échelle §1-3),
+   MAIS en plus elle peut :
+   - vérifier l'état du cluster en direct (`kubectl get/describe` elle-même)
+   - poser des questions de compréhension ("pourquoi ce paramètre ?")
+   - faire des mini-démos (`kubectl explain` sur un champ précis)
+4. **Après chaque scénario**, l'IA évalue le résultat :
+   - SOLVED sans indice → passer au suivant, éventuellement monter en difficulté
+   - SOLVED avec indices → noter le point faible, prévoir une variante
+   - FAILED → diagnostiquer, donner un mini-cours ciblé, puis RETENTER
+5. **Adaptation** : selon les résultats, l'IA peut :
+   - **générer un nouveau scénario** à la volée (format YAML, `./run.sh run <id>`)
+   - **modifier un scénario existant** (changer un paramètre, ajouter un piège)
+   - **proposer un exercice de renforcement** sur le domaine faible
+   - **sauter des scénarios** trop faciles pour accélérer
+
+### Template de génération à la volée
+
+```yaml
+id: ai-<topic>-<n>
+title: "Generated: <description>"
+domain: <domain>
+weight: 3
+difficulty: <easy|medium|hard>
+requires: {workers: 1}    # adapter au cluster détecté
+setup:
+  apply: setup.yaml        # ou script: pour les break/fix
+question: |
+  <énoncé concis, style examen>
+hints:
+  - { level: 1, text: "orientation" }
+  - { level: 2, text: "méthode de recherche" }
+  - { level: 3, text: "astuce/piège" }
+check:
+  assertions:
+    - run: "kubectl ..."
+      contains: "expected"
+```
+
+L'IA écrit ce YAML dans `scenarios/<cert>/<domain>/<id>/scenario.yaml` (+ setup.yaml),
+puis lance `./run.sh run <id>` pour valider que setup + assertions passent.

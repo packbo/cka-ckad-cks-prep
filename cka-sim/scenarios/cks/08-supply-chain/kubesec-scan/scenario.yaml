@@ -1,0 +1,25 @@
+id: kubesec-scan
+title: "Static analysis of a manifest with kubesec"
+domain: supply-chain
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  The file `scenarios/cks/08-supply-chain/kubesec-scan/privileged-pod.yaml`
+  declares a privileged pod. Run a kubesec static analysis on it (docker
+  image `kubesec/kubesec:latest`) and identify the reported issue.
+hints:
+  - level: 1
+    text: "kubesec ships as a container: docker run --rm -i kubesec/kubesec:latest scan /dev/stdin < file"
+  - level: 2
+    text: "Run: docker run --rm -i kubesec/kubesec:latest scan /dev/stdin < scenarios/cks/08-supply-chain/kubesec-scan/privileged-pod.yaml | jq ."
+  - level: 3
+    text: "Look at .[0].scoring.advise — the privileged container flag gives a negative score. Fix idea (not graded): drop privileged: true."
+  - level: solution
+    text: "docker run --rm -i kubesec/kubesec:latest scan /dev/stdin < scenarios/cks/08-supply-chain/kubesec-scan/privileged-pod.yaml | jq '.[0] | {score, advise: .scoring.advise}'"
+check:
+  assertions:
+    - run: "docker run --rm -i kubesec/kubesec:latest scan /dev/stdin < scenarios/cks/08-supply-chain/kubesec-scan/privileged-pod.yaml | jq -c '.[0].scoring' | grep -q advise && echo analysed"
+      contains: "analysed"

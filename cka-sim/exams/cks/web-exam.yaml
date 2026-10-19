@@ -1,0 +1,9 @@
+minutes: 120
+threshold: 66
+scenarios:
+  - rbac-minimal-sa
+  - harden-pod
+  - ingress-tls
+  - psa-namespace
+  - security-context
+  - sa-automount

@@ -1,0 +1,28 @@
+id: verify-binaries
+title: "Verify a platform binary against its official checksum"
+domain: supply-chain
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  Verify that the installed `kubectl` binary matches its OFFICIAL published
+  checksum for its exact version (dl.k8s.io).
+hints:
+  - level: 1
+    text: "Each release publishes <binary>.sha512 next to the binary on dl.k8s.io: https://dl.k8s.io/release/<version>/bin/linux/amd64/kubectl.sha512"
+  - level: 2
+    text: "Get your version: kubectl version --client -o json | jq -r .clientVersion.gitVersion . The .sha512 contains ONLY the raw hash (no filename since v1.31)."
+  - level: 3
+    text: "Compare: REMOTE=$(curl -fsSL URL | tr -d ' \\n\\r') ; LOCAL=$(sha512sum $(readlink -f $(which kubectl)) | awk '{print $1}') ; [ \"$REMOTE\" = \"$LOCAL\" ] && echo VERIFIED"
+  - level: solution
+    text: |
+      V=$(kubectl version --client -o json | jq -r .clientVersion.gitVersion)
+      REMOTE=$(curl -fsSL "https://dl.k8s.io/release/${V}/bin/linux/amd64/kubectl.sha512" | tr -d " \\n\\r")
+      LOCAL=$(sha512sum $(readlink -f $(which kubectl)) | awk '{print $1}')
+      [ "$REMOTE" = "$LOCAL" ] && echo VERIFIED
+check:
+  assertions:
+    - run: "V=$(kubectl version --client -o json | jq -r .clientVersion.gitVersion); B=$(readlink -f $(which kubectl)); REMOTE=$(curl -fsSL \"https://dl.k8s.io/release/${V}/bin/linux/amd64/kubectl.sha512\" | tr -d \" \\n\\r\"); LOCAL=$(sha512sum $B | awk '{print $1}'); [ \"$REMOTE\" = \"$LOCAL\" ] && echo checksum-ok"
+      contains: "checksum-ok"

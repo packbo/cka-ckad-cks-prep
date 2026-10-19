@@ -1,0 +1,48 @@
+id: ingress-tls
+title: "Ingress with TLS"
+domain: services-networking
+weight: 3
+difficulty: medium
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `tlsdemo`: create a TLS secret `tls-secure` for host
+  `secure.example.com` (self-signed cert is fine), then an Ingress named
+  `secure` routing `secure.example.com/` to service `app` (port 80),
+  encrypted with that secret.
+hints:
+  - level: 1
+    text: "One-liner for the cert+key: openssl req -x509 -nodes -newkey rsa:2048 -keyout /tmp/tls.key -out /tmp/tls.crt -subj '/CN=secure.example.com'"
+  - level: 2
+    text: "Then: kubectl create secret tls tls-secure --cert=/tmp/tls.crt --key=/tmp/tls.key -n tlsdemo . Ingress apiVersion: networking.k8s.io/v1 with spec.tls[].secretName + hosts."
+  - level: 3
+    text: "No ingress controller on this cluster — the task is graded on the RESOURCES (secret type + ingress spec.tls). Copy the Ingress example from kubernetes.io/docs/concepts/services-networking/ingress/ and add the tls block."
+  - level: solution
+    text: |
+      openssl req -x509 -nodes -newkey rsa:2048 -keyout /tmp/tls.key -out /tmp/tls.crt -subj "/CN=secure.example.com"
+      kubectl create secret tls tls-secure --cert=/tmp/tls.crt --key=/tmp/tls.key -n tlsdemo
+      kubectl apply -f - <<EOF
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata: { name: secure, namespace: tlsdemo }
+      spec:
+        tls:
+        - hosts: [secure.example.com]
+          secretName: tls-secure
+        rules:
+        - host: secure.example.com
+          http:
+            paths:
+            - path: /
+              pathType: Prefix
+              backend: { service: { name: app, port: { number: 80 } } }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get secret tls-secure -n tlsdemo -o jsonpath='{.type}'"
+      equals: "kubernetes.io/tls"
+    - run: "kubectl get ingress secure -n tlsdemo -o jsonpath='{.spec.tls[0].secretName}'"
+      equals: "tls-secure"
+    - run: "kubectl get ingress secure -n tlsdemo -o jsonpath='{.spec.tls[0].hosts[0]}'"
+      equals: "secure.example.com"

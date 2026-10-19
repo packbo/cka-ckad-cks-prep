@@ -31,10 +31,11 @@ def find_level(scenario, level: int):
 
 
 def show_hint(scenario, level: int, ui) -> None:
+    from cka_sim import env as _env
     h = find_level(scenario, level)
     if not h:
         ui.warn(f"no hint at level {level} for this scenario")
         return
     label = LEVEL_LABEL.get(level, str(level))
     pen = PENALTY.get(level, 0)
-    ui.hint(f"[{label}] (-{int(pen*100)}%) {h.get('text','').strip()}")
+    ui.hint(f"[{label}] (-{int(pen*100)}%) {_env.substitute(h.get('text','').strip())}")

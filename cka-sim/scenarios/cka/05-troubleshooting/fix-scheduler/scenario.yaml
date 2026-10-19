@@ -1,0 +1,37 @@
+id: fix-scheduler
+title: "Pods stuck Pending: the scheduler is gone"
+domain: troubleshooting
+weight: 4
+difficulty: hard
+time_estimate: 420
+requires: {node_exec: true}
+setup:
+  apply: setup.yaml
+  script:
+    - "%NODEEXEC% cp /etc/kubernetes/manifests/kube-scheduler.yaml /root/kube-scheduler.yaml.bak"
+    - "%NODEEXEC% mv /etc/kubernetes/manifests/kube-scheduler.yaml /root/kube-scheduler.yaml.hold"
+question: |
+  In namespace `sched2`, create deployment `ping` (image `nginx:1.21`,
+  1 replica) — its pod stays `Pending`.
+
+  Find why NOTHING schedules anymore, repair it, and make `ping` Running.
+hints:
+  - level: 1
+    text: "Pending everywhere with no events usually means a missing control-plane component: kubectl -n kube-system get pods  — what is absent?"
+  - level: 2
+    text: "The scheduler static-pod manifest was REMOVED from /etc/kubernetes/manifests (a copy waits in /root/kube-scheduler.yaml.hold on the node)."
+  - level: 3
+    text: "Put it back and wait for the component: %NODEEXEC% mv /root/kube-scheduler.yaml.hold /etc/kubernetes/manifests/kube-scheduler.yaml ; kubectl -n kube-system wait --for=condition=Ready pod/kube-scheduler-%CP% --timeout=120s — then rollout your deployment."
+  - level: solution
+    text: |
+      kubectl -n kube-system get pods                          # no scheduler
+      %NODEEXEC% mv /root/kube-scheduler.yaml.hold /etc/kubernetes/manifests/kube-scheduler.yaml
+      kubectl -n kube-system wait --for=condition=Ready pod/kube-scheduler-%CP% --timeout=120s
+      kubectl create deploy ping --image=nginx:1.21 -n sched2
+      kubectl rollout status deploy/ping -n sched2 --timeout=120s
+check:
+  assertions:
+    - run: "kubectl -n kube-system wait --for=condition=Ready pod/kube-scheduler-%CP% --timeout=60s && echo scheduler-ok"
+      contains: "scheduler-ok"
+    - run: "kubectl get deploy ping -n sched2 -o jsonpath='{.status.availableReplicas}'"
+      equals: "1"

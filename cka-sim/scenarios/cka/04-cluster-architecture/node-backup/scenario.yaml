@@ -1,0 +1,32 @@
+id: node-backup
+title: "Back up the control-plane configuration (/etc/kubernetes)"
+domain: cluster-architecture
+weight: 3
+difficulty: medium
+time_estimate: 240
+requires: {node_exec: true}
+setup:
+  script:
+    - "%NODEEXEC% rm -f /root/k8s-cp-backup.tar.gz"
+question: |
+  Back up the control-plane's cluster configuration (PKI + static-pod
+  manifests, NOT the etcd data) into `/root/k8s-cp-backup.tar.gz` on the
+  control-plane node, then verify the archive contains the CA certificate.
+hints:
+  - level: 1
+    text: "Everything kubeadm manages lives under /etc/kubernetes on the node (pki/, manifests/)."
+  - level: 2
+    text: "%NODEEXEC% tar czf /root/k8s-cp-backup.tar.gz /etc/kubernetes  (run it on the node)"
+  - level: 3
+    text: "Verify the archive content: %NODEEXEC% tar tzf /root/k8s-cp-backup.tar.gz | grep pki/ca.crt . Full DR = this archive + an etcd snapshot (see the etcd-backup scenario)."
+  - level: solution
+    text: |
+      %NODEEXEC% tar czf /root/k8s-cp-backup.tar.gz /etc/kubernetes
+      %NODEEXEC% tar tzf /root/k8s-cp-backup.tar.gz | head
+      %NODEEXEC% tar tzf /root/k8s-cp-backup.tar.gz | grep pki/ca.crt
+check:
+  assertions:
+    - run: "%NODEEXEC% test -s /root/k8s-cp-backup.tar.gz && echo archive-ok"
+      contains: "archive-ok"
+    - run: "%NODEEXEC% tar tzf /root/k8s-cp-backup.tar.gz | grep -q pki/ca.crt && echo pki-ok"
+      contains: "pki-ok"

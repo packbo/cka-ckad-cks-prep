@@ -1,0 +1,45 @@
+id: etcd-restore
+title: "Disaster recovery: restore etcd from a snapshot"
+domain: cluster-architecture
+weight: 6
+difficulty: hard
+time_estimate: 600
+requires: {node_exec: true}
+setup:
+  script:
+    - "test -s /root/etcd.yaml.orig || %NODEEXEC% sh -c 'grep -q -- \"--data-dir=/var/lib/etcd$\" /etc/kubernetes/manifests/etcd.yaml && cp /etc/kubernetes/manifests/etcd.yaml /root/etcd.yaml.orig'"
+    - "%NODEEXEC% cp /root/etcd.yaml.orig /etc/kubernetes/manifests/etcd.yaml"
+    - "timeout 150 bash -c 'until kubectl -n kube-system get pod etcd-%CP% --no-headers 2>/dev/null | grep -q Running; do sleep 3; done'"
+    - "%NODEEXEC% rm -rf /var/lib/etcd-restore /root/etcd.yaml.hold"
+    - "VV=v$(kubectl -n kube-system get pod etcd-%CP% -o jsonpath='{.spec.containers[0].image}' | grep -oE '3\\.[0-9]+\\.[0-9]+' | head -1); curl -fsSL \"https://github.com/etcd-io/etcd/releases/download/${VV}/etcd-${VV}-linux-amd64.tar.gz\" | tar xz -C /tmp --strip-components=1 \"etcd-${VV}-linux-amd64/etcdctl\" && test -s /tmp/etcdctl && %CPCP% /tmp/etcdctl %CPDEST%/usr/local/bin/etcdctl && %NODEEXEC% chmod +x /usr/local/bin/etcdctl"
+    - "kubectl create configmap canary -n default --from-literal=marker=before --dry-run=client -o yaml | kubectl apply -f -"
+    - "%NODEEXEC% sh -c 'ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key snapshot save /root/snap.db'"
+    - "%NODEEXEC% test -s /root/snap.db"
+    - "kubectl delete configmap canary -n default --ignore-not-found"
+question: |
+  A ConfigMap `canary` existed when the snapshot `/root/snap.db` was taken,
+  then it was DELETED (disaster).
+
+  Restore etcd from that snapshot so `canary` exists AGAIN, with etcd healthy.
+hints:
+  - level: 1
+    text: "etcdctl (now installed on the node) restores into a NEW data-dir, and it REFUSES to restore into a directory an running etcd uses — etcd must be STOPPED first."
+  - level: 2
+    text: "Stop etcd by moving its static-pod manifest away: %NODEEXEC% mv /etc/kubernetes/manifests/etcd.yaml /root/etcd.yaml.hold  (wait ~15s for the pod to terminate)"
+  - level: 3
+    text: "%NODEEXEC% sh -c 'ETCDCTL_API=3 etcdctl snapshot restore /root/snap.db --data-dir=/var/lib/etcd-restore' ; then make the held manifest use that dir BEFORE putting it back: %NODEEXEC% sed -i 's|/var/lib/etcd|/var/lib/etcd-restore|g' /root/etcd.yaml.hold && %NODEEXEC% mv /root/etcd.yaml.hold /etc/kubernetes/manifests/etcd.yaml"
+  - level: solution
+    text: |
+      %NODEEXEC% mv /etc/kubernetes/manifests/etcd.yaml /root/etcd.yaml.hold
+      sleep 15
+      %NODEEXEC% sh -c 'ETCDCTL_API=3 etcdctl snapshot restore /root/snap.db --data-dir=/var/lib/etcd-restore'
+      %NODEEXEC% sed -i 's|/var/lib/etcd|/var/lib/etcd-restore|g' /root/etcd.yaml.hold
+      %NODEEXEC% mv /root/etcd.yaml.hold /etc/kubernetes/manifests/etcd.yaml
+      kubectl -n kube-system wait --for=condition=Ready pod/etcd-%CP% --timeout=150s
+      kubectl get configmap canary -n default
+check:
+  assertions:
+    - run: "kubectl -n kube-system wait --for=condition=Ready pod/etcd-%CP% --timeout=90s && echo etcd-ok"
+      contains: "etcd-ok"
+    - run: "kubectl get configmap canary -n default -o jsonpath='{.data.marker}'"
+      equals: "before"
