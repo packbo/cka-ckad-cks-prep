@@ -70,6 +70,8 @@ state).
 You type **real kubectl commands** (pipes with `jq`/`grep` work), with **tab completion**
 (kubectl-aware, via `kubectl __complete`), **exam aliases** (`k`, `kgp`, `$do`, `$now`...)
 expanded automatically, and **persistent history** (up-arrow across sessions).
+**Ctrl+C never skips the exercise** (terminal copy is safe) — only `:skip` moves on,
+Ctrl+D leaves the session.
 Meta-commands:
 
 | Meta-command | Effect | Score penalty |
@@ -77,7 +79,7 @@ Meta-commands:
 | `:hint 1` | Orientation (which command family) | -10% |
 | `:hint 2` | Research method (`paths(scalars)`, `explain --recursive`) | -25% |
 | `:hint 3` | Doc tip / anti-pitfall | -40% |
-| `:check` | Validate the cluster state | — |
+| `:check [n]` | Validate the cluster state — current question, or question `n` from anywhere in the session (records the PASS if first) | — |
 | `:cheat [topic]` | Speed cheatsheet: setup-once, jq, jsonpath, kubectl | — |
 | `:tag [note]` / `:untag` | Mark scenario for review (persisted, `./run.sh review`) | — |
 | `:back` / `:goto <n>` | In exam/review: previous question / jump (bare `:goto` = map) | — |

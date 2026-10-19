@@ -29,6 +29,14 @@ class SessionExit(Exception):
     """:exit — leave the exam/review session immediately (partial report)."""
 
 
+class CheckRequest(Exception):
+    """:check <n> — validate another question's assertions (session only)."""
+
+    def __init__(self, question: int):
+        self.question = question
+        super().__init__(f"remote check question={question}")
+
+
 @dataclass
 class Scenario:
     id: str
@@ -169,7 +177,7 @@ def run_scenario(
         _setup(scenario, backend)
         setup_done.add(scenario.id)
     ui.question(scenario.question)
-    ui.info("meta:  :hint <1-4>  :check  :cheat  :question  :reset  :tag  :back  :goto <n>  :solution  :skip  :exit")
+    ui.info("meta:  :hint <1-4>  :check [n]  :cheat  :question  :reset  :tag  :back  :goto <n>  :solution  :skip  :exit")
     print()
 
     hints_used = 0
@@ -177,9 +185,15 @@ def run_scenario(
     while True:
         try:
             raw = input(ui.prompt()).strip()
-        except (EOFError, KeyboardInterrupt):
+        except EOFError:
             print()
             return ScenarioResult(scenario, False, 0.0, hints_used, skipped=True)
+        except KeyboardInterrupt:
+            # Ctrl+C must NEVER skip the exercise (people press it to copy).
+            # Only :skip moves on, Ctrl+D leaves the session.
+            print()
+            ui.info("(Ctrl+C ignored — :skip to move on · Ctrl+D to leave)")
+            continue
         if not raw:
             continue
 
@@ -191,6 +205,8 @@ def run_scenario(
                 show_hint(scenario, level, ui)
                 hints_used = max(hints_used, level)
             elif cmd == ":check":
+                if len(parts) > 1 and parts[1].isdigit():
+                    raise CheckRequest(int(parts[1]))
                 results = run_all(_check_assertions(scenario))
                 passed = all(r.passed for r in results) if results else False
                 for i, r in enumerate(results, 1):
@@ -243,7 +259,12 @@ def run_scenario(
         expanded = completion.expand_command(raw)
         if expanded != raw:
             ui.info(f"→ {expanded}")
-        cp = run_shell(expanded)
+        try:
+            cp = run_shell(expanded)
+        except KeyboardInterrupt:
+            print()
+            ui.warn("^C — command interrupted (scenario unchanged)")
+            continue
         if cp.stdout:
             ui.out(cp.stdout.rstrip())
         if cp.stderr:

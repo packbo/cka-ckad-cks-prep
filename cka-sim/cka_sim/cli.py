@@ -8,17 +8,20 @@ import sys
 import yaml
 
 from cka_sim import paths, review, ui
-from cka_sim.cluster import KindBackend, kind_installed, kubectl_installed
+from cka_sim.cluster import KindBackend, kind_installed, kubectl_installed, run_shell
 from cka_sim.engine import (
+    CheckRequest,
     NavRequest,
     ScenarioResult,
     SessionExit,
+    load_assertions,
     load_scenarios,
     run_scenario,
 )
 from cka_sim.paths import EXAMS_ROOT
 from cka_sim.reporter import report
 from cka_sim.timer import Timer
+from cka_sim.validator import run_all
 
 backend = KindBackend()
 
@@ -62,6 +65,8 @@ def cmd_run(args):
         return
     except NavRequest:
         ui.warn("navigation (:back/:goto) works inside sessions — ./run.sh exam | ./run.sh review")
+    except CheckRequest:
+        ui.warn(":check <n> works inside sessions — ./run.sh exam | ./run.sh review")
 
 
 def _print_progress(seq, results, current):
@@ -74,6 +79,29 @@ def _print_progress(seq, results, current):
         star = " ★" if review.is_tagged(sid) else ""
         print(f"  {here}{n:>2}. [{mark}] {sid}{star}")
     print()
+
+
+def _remote_check(n: int, seq, all_scen, results: dict):
+    """:check <n> — run another question's assertions without leaving the current one."""
+    if not (1 <= n <= len(seq)):
+        ui.warn(f"question out of range 1..{len(seq)}")
+        return
+    sid = seq[n - 1]
+    scen = all_scen[sid]
+    ui.info(f"--- remote check of question {n}: [{sid}] ---")
+    check_results = run_all(load_assertions(scen))
+    passed = bool(check_results) and all(r.passed for r in check_results)
+    for i, r in enumerate(check_results, 1):
+        (ui.ok if r.passed else ui.fail)(f"[{i}/{len(check_results)}] {r.detail}")
+    if not passed:
+        ui.warn(f"Q{n} [{sid}] not passing (yet)")
+        return
+    prev = results.get(sid)
+    if prev and prev.passed:
+        ui.info(f"'{sid}' already passed earlier — first PASS kept for the score")
+    else:
+        results[sid] = ScenarioResult(scen, True, float(scen.weight), 0)
+        ui.banner(f"Q{n} [{sid}] SOLVED (remote check) — {scen.weight}/{scen.weight} recorded")
 
 
 def _session_loop(ids, minutes=None):
@@ -118,6 +146,9 @@ def _session_loop(ids, minutes=None):
                 ui.warn(f"question out of range 1..{len(seq)}")
                 continue
             i = j
+            continue
+        except CheckRequest as cr:
+            _remote_check(cr.question, seq, all_scen, results)
             continue
         prev = results.get(sid)
         if prev and prev.passed and not r.passed:
