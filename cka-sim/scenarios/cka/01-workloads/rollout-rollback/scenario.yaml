@@ -1,0 +1,37 @@
+id: rollout-rollback
+title: "Update an image, then roll back"
+domain: workloads
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `rollouts`, Deployment `api` (container name: `api`) runs `nginx:1.21`.
+
+  1. Update the image to `nginx:1.22` and WAIT until the rollout completes.
+  2. Then ROLL BACK to the previous revision and wait again.
+
+  Graded final state: image back to `nginx:1.21`, 2/2 replicas available,
+  and the revision annotation equal to `3` (one update + one undo).
+hints:
+  - level: 1
+    text: "The rollout family: kubectl set image / rollout status / rollout history / rollout undo."
+  - level: 2
+    text: "Watch each step finish before the next: kubectl rollout status deploy/api -n rollouts . See revisions: kubectl rollout history deploy/api -n rollouts"
+  - level: 3
+    text: "Undo defaults to the PREVIOUS revision: kubectl rollout undo deploy/api -n rollouts . Prove it happened: kubectl get deploy api -n rollouts -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}' must be 3."
+  - level: solution
+    text: |
+      kubectl set image deploy/api api=nginx:1.22 -n rollouts
+      kubectl rollout status deploy/api -n rollouts
+      kubectl rollout undo deploy/api -n rollouts
+      kubectl rollout status deploy/api -n rollouts
+check:
+  assertions:
+    - run: "kubectl get deploy api -n rollouts -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      equals: "nginx:1.21"
+    - run: "kubectl get deploy api -n rollouts -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"
+    - run: "kubectl get deploy api -n rollouts -o jsonpath='{.metadata.annotations.deployment\\.kubernetes\\.io/revision}'"
+      equals: "3"

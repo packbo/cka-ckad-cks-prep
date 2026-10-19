@@ -9,3 +9,7 @@ scenarios:
   - service-no-endpoints
   - network-policy
   - extract-image-deploy
+  - rollout-rollback
+  - blue-green-deploy
+  - canary-deploy
+  - fix-crashloop

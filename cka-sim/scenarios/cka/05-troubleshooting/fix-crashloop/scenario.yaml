@@ -1,0 +1,34 @@
+id: fix-crashloop
+title: "Diagnose and fix a CrashLoopBackOff"
+domain: troubleshooting
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `crash`, the pods of Deployment `crasher` are stuck in
+  `CrashLoopBackOff`.
+
+  1. Diagnose: find WHY they crash (logs + describe).
+  2. Fix it by changing the container command to `sh -c "sleep 3600"`.
+
+  Graded final state: the deployment template runs `sleep 3600`
+  and 1/1 replica is available.
+hints:
+  - level: 1
+    text: "Two reflexes: kubectl logs deploy/crasher -n crash --previous  and  kubectl describe deploy/crasher -n crash (Events)."
+  - level: 2
+    text: "Root cause: the container command exits immediately (exit 1) — nothing wrong with the image. A Deployment's pod template is patchable (unlike a bare Pod)."
+  - level: 3
+    text: "Strategic-merge patch (merges by container name): kubectl patch deploy crasher -n crash -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"crasher\",\"command\":[\"sh\",\"-c\",\"sleep 3600\"]}]}}}}'  then kubectl rollout status deploy/crasher -n crash"
+  - level: solution
+    text: |
+      kubectl patch deploy crasher -n crash -p '{"spec":{"template":{"spec":{"containers":[{"name":"crasher","command":["sh","-c","sleep 3600"]}]}}}}'
+      kubectl rollout status deploy/crasher -n crash
+check:
+  assertions:
+    - run: "kubectl get deploy crasher -n crash -o jsonpath='{.spec.template.spec.containers[0].command}'"
+      contains: "sleep 3600"
+    - run: "kubectl get deploy crasher -n crash -o jsonpath='{.status.availableReplicas}'"
+      equals: "1"

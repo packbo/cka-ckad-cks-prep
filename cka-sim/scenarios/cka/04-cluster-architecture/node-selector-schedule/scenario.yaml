@@ -1,0 +1,41 @@
+id: node-selector-schedule
+title: "Pin a workload to a labeled node"
+domain: cluster-architecture
+weight: 4
+difficulty: medium
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `sched`:
+
+  1. Label exactly ONE node (a worker, not the control-plane) with
+     `disktype=ssd`.
+  2. Create Deployment `cache`: image `redis:7`, 2 replicas, pods labeled
+     `app=cache`, with `nodeSelector: disktype: ssd`.
+
+  Graded final state: both pods run on the SAME single node, that node
+  carries the label, and the template's nodeSelector is set.
+hints:
+  - level: 1
+    text: "Two steps: kubectl label node <worker> disktype=ssd , then a Deployment with spec.template.spec.nodeSelector."
+  - level: 2
+    text: "Generate fast: kubectl create deploy cache --image=redis:7 -n sched --dry-run=client -o yaml > cache.yaml ; add nodeSelector under template.spec. (labels app=cache come for free from create deploy)"
+  - level: 3
+    text: "Or patch an existing deploy: kubectl patch deploy cache -n sched -p '{\"spec\":{\"template\":{\"spec\":{\"nodeSelector\":{\"disktype\":\"ssd\"}}}}}' . Verify: kubectl get pods -n sched -o wide (same NODE column twice)."
+  - level: solution
+    text: |
+      kubectl label node <worker-name> disktype=ssd
+      kubectl create deploy cache --image=redis:7 -n sched --replicas=2
+      kubectl patch deploy cache -n sched -p '{"spec":{"template":{"spec":{"nodeSelector":{"disktype":"ssd"}}}}}'
+      kubectl rollout status deploy/cache -n sched
+check:
+  assertions:
+    - run: "kubectl get pods -n sched -l app=cache -o json | jq '[.items[] | select(.status.phase==\"Running\" and .metadata.deletionTimestamp == null)] | length'"
+      equals: "2"
+    - run: "kubectl get pods -n sched -l app=cache -o json | jq '[.items[] | select(.status.phase==\"Running\" and .metadata.deletionTimestamp == null) | .spec.nodeName] | unique | length'"
+      equals: "1"
+    - run: "NODE=$(kubectl get pods -n sched -l app=cache -o jsonpath='{.items[0].spec.nodeName}'); kubectl get node $NODE -o jsonpath='{.metadata.labels.disktype}'"
+      equals: "ssd"
+    - run: "kubectl get deploy cache -n sched -o jsonpath='{.spec.template.spec.nodeSelector.disktype}'"
+      equals: "ssd"

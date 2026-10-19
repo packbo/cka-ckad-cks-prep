@@ -2,31 +2,46 @@ id: job-completions
 title: "Job with completions and parallelism"
 domain: workloads
 weight: 3
-difficulty: easy
-time_estimate: 180
+difficulty: medium
+time_estimate: 240
 setup:
   apply: setup.yaml
 question: |
-  In namespace `ckad`, create a Job named `migrate`:
+  In namespace `jobs`, create a Job named `report`:
+  - image: `busybox:1.36`
+  - command: `sh -c "echo done"`
+  - completions: `3`   (3 successful pods in total)
+  - parallelism: `2`   (at most 2 at a time)
+  - restartPolicy: `Never`
 
-  - image `busybox:1.36`, command `echo done`
-  - 3 completions, parallelism 2
-
-  Wait until all pods have succeeded.
+  Graded final state: `.status.succeeded` == 3.
 hints:
   - level: 1
-    text: "kubectl create job has flags for both settings; check kubectl create job --help"
+    text: "kubectl create job cannot set completions/parallelism — generate the YAML and edit it."
   - level: 2
-    text: "kubectl create job migrate --image=busybox:1.36 -n ckad -- sh -c 'echo done' $do > job.yaml , edit completions/parallelism, kubectl apply -f job.yaml"
+    text: "kubectl create job report --image=busybox:1.36 -n jobs --dry-run=client -o yaml > job.yaml ; then add completions, parallelism, restartPolicy and the command."
   - level: 3
-    text: "Verify completion: kubectl get job migrate -n ckad -w  (COMPLETIONS 3/3). Suspect a stuck pod? kubectl describe pod / logs."
+    text: "Job pods need restartPolicy: Never (not the Deployment default Always). Watch: kubectl get jobs,pods -n jobs -w ; done when kubectl get job report -n jobs -o jsonpath='{.status.succeeded}' is 3."
   - level: solution
-    text: "kubectl create job migrate --image=busybox:1.36 -n ckad -- sh -c 'echo done' $do > j.yaml && sed -i 's/parallelism: 1/parallelism: 2\\n  completions: 3/' j.yaml && kubectl apply -f j.yaml"
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: batch/v1
+      kind: Job
+      metadata: { name: report, namespace: jobs }
+      spec:
+        completions: 3
+        parallelism: 2
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - { name: report, image: busybox:1.36, command: ["sh","-c","echo done"] }
+      EOF
 check:
   assertions:
-    - run: "kubectl get job migrate -n ckad -o jsonpath='{.spec.completions}'"
+    - run: "kubectl get job report -n jobs -o jsonpath='{.status.succeeded}'"
       equals: "3"
-    - run: "kubectl get job migrate -n ckad -o jsonpath='{.spec.parallelism}'"
+    - run: "kubectl get job report -n jobs -o jsonpath='{.spec.completions}'"
+      equals: "3"
+    - run: "kubectl get job report -n jobs -o jsonpath='{.spec.parallelism}'"
       equals: "2"
-    - run: "kubectl get job migrate -n ckad -o jsonpath='{.status.succeeded}'"
-      equals: "3"

@@ -17,3 +17,9 @@ scenarios:
   - netpol-default-deny
   - taint-worker
   - security-context
+  - rollout-rollback
+  - blue-green-deploy
+  - canary-deploy
+  - job-completions
+  - fix-crashloop
+  - node-selector-schedule

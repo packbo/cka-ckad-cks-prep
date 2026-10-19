@@ -193,11 +193,21 @@ def cmd_untag(args):
 
 
 def cmd_up(args):
+    from cka_sim.cluster import run_shell
+
+    if backend.ready():
+        ctx = run_shell("kubectl config current-context").stdout.strip() or "?"
+        kind_path = ctx.startswith("kind-")
+        if kind_path:
+            ui.ok(f"kind cluster already running ({ctx})")
+        else:
+            ui.ok(f"existing cluster detected ({ctx}) — using it, kind not needed (Killercoda/managed path)")
+        return
     if not kubectl_installed():
-        ui.warn("kubectl not installed. See install.sh")
+        ui.warn("kubectl not installed. Run:  bash install.sh")
         return
     if not kind_installed():
-        ui.warn("kind not installed. Run:  bash install.sh")
+        ui.warn("no running cluster and kind not installed. Run:  bash install.sh")
         return
     backend.create()
     ui.ok("cluster ready: " + str(backend.ready()))
@@ -215,9 +225,17 @@ def cmd_reset(args):
 
 
 def cmd_status(args):
+    from cka_sim.cluster import run_shell
+
     print("kubectl:", "ok" if kubectl_installed() else "MISSING")
-    print("kind:    ", "ok" if kind_installed() else "MISSING")
-    print("cluster: ", "ready" if backend.ready() else "not running")
+    print("kind:    ", "ok" if kind_installed() else "not installed")
+    ctx = run_shell("kubectl config current-context").stdout.strip()
+    print("context: ", ctx or "-")
+    if backend.ready():
+        mode = "kind (local)" if ctx.startswith("kind-") else "existing cluster (Killercoda/managed)"
+        print("cluster: ", f"ready — {mode}")
+    else:
+        print("cluster: ", "not running")
 
 
 PF_PID_FILE = "/tmp/cka-exam.pf.pid"
