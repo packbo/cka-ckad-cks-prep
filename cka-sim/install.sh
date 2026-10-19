@@ -28,7 +28,15 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 echo "Installing python deps..."
-pip3 install -q -r requirements.txt || pip install -q -r requirements.txt
+if python3 -m venv "$SCRIPT_DIR/.venv" 2>/dev/null; then
+  "$SCRIPT_DIR/.venv/bin/pip" install -q --upgrade pip >/dev/null 2>&1 || true
+  "$SCRIPT_DIR/.venv/bin/pip" install -q -r "$SCRIPT_DIR/requirements.txt"
+  echo "python deps installed in .venv (run.sh will use it automatically)"
+else
+  # venv unavailable (needs python3-full on Debian) -> fall back to system pip
+  pip3 install -q -r "$SCRIPT_DIR/requirements.txt" || \
+    pip3 install -q --break-system-packages -r "$SCRIPT_DIR/requirements.txt"
+fi
 
 if kind get clusters 2>/dev/null | grep -q "^${CLUSTER_NAME}$"; then
   echo "Cluster '${CLUSTER_NAME}' already exists."
