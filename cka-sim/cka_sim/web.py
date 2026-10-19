@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
+import subprocess
 import threading
 import time
 from collections import defaultdict
@@ -39,6 +41,8 @@ DOC_LINKS = [
     ("RBAC", "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"),
     ("kubeadm upgrade", "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/"),
     ("etcd backup/restore", "https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/"),
+    ("kubectl shell autocompletion", "https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/#enable-shell-autocompletion"),
+    ("helm completion", "https://helm.sh/docs/helm/helm_completion/"),
 ]
 
 
@@ -150,6 +154,53 @@ def access_info() -> dict:
     return {"nodePort": port, "nodeIPs": ips}
 
 
+TOOL_MAP = {"k": "kubectl", "kubectl": "kubectl"}
+NO_SANDBOX = {"helm", "kubeadm", "k9s", "istioctl", "kubectl-krew"}
+
+
+def complete_command(text: str) -> dict:
+    """Real shell completion via the hidden cobra `__complete` protocol.
+
+    Returns suggestions for the word being typed: subcommands, flags
+    (options), resource types and even live resource names.
+    """
+    text = (text or "").lstrip()
+    if not text:
+        return {"suggestions": ["kubectl ", "k "], "note": "start with kubectl…"}
+    try:
+        words = shlex.split(text)
+    except ValueError:
+        words = text.split()
+    if text.endswith(" ") or not words:
+        words = words + [""]
+    first = words[0]
+    if first in NO_SANDBOX:
+        return {
+            "suggestions": [],
+            "note": f"'{first}' is not installed in this sandbox — activation "
+                    f"commands for your own shell are in the Cheatsheet tab.",
+        }
+    tool = TOOL_MAP.get(first)
+    if tool is None:
+        return {
+            "suggestions": [],
+            "note": "Tab completion here covers: kubectl / k. "
+                    "Activation for helm, kubeadm & co: Cheatsheet tab.",
+        }
+    try:
+        cp = subprocess.run([tool, "__complete"] + words[1:],
+                            capture_output=True, text=True, timeout=10)
+    except Exception:
+        return {"suggestions": [], "note": "completion unavailable"}
+    suggestions = []
+    for line in (cp.stdout or "").splitlines():
+        if line.startswith(":"):
+            break
+        if line.strip():
+            suggestions.append(line.strip())
+    return {"suggestions": suggestions[:40]}
+
+
 # ------------------------------------------------------------- kubeconfig --
 def ensure_kubeconfig() -> None:
     """When running in-cluster, build a kubeconfig from the ServiceAccount."""
@@ -233,6 +284,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .docs li{padding:9px 0;border-bottom:1px solid var(--line)}
   .docs a{color:var(--acc);text-decoration:none;font-size:15px}
   .docs a:hover{text-decoration:underline}
+  .suggbox{position:relative;margin-top:6px;max-height:200px;overflow:auto;background:#0b101c;
+           border:1px solid var(--line);border-radius:8px;display:none}
+  .suggbox.show{display:block}
+  .sg{padding:6px 12px;font-family:ui-monospace,monospace;font-size:12.5px;cursor:pointer;color:var(--txt)}
+  .sg:hover,.sg.on{background:var(--panel2);color:var(--acc)}
+  .sgmeta{padding:5px 12px;color:var(--mut);font-size:12px}
   .bigscore{font-size:42px;font-weight:800}
   #banner{display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;
           padding:18px;margin-bottom:16px}
@@ -272,9 +329,11 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <div>
       <div class="card">
         <h3>Terminal</h3>
-        <input class="cmd" id="cmd" placeholder="kubectl get pods -A   (then Enter)" spellcheck="false">
+        <input class="cmd" id="cmd" placeholder="kubectl get pods -A   (Tab = completion, Enter = run)" spellcheck="false">
+        <div id="sugg" class="suggbox"></div>
         <button onclick="runCmd()">Run</button>
         <button class="ghost" onclick="clearOut()">Clear</button>
+        <span class="meta" style="margin-left:6px">Tab: kubectl completion (commands, flags, resources, names)</span>
         <pre id="out"></pre>
       </div>
       <div class="card">
@@ -393,7 +452,44 @@ async function runCmd(){
 }
 function out(t){$('out').textContent=t||' ';}
 function clearOut(){out('');}
-$('cmd').addEventListener('keydown',e=>{if(e.key==='Enter')runCmd();});
+
+let SG={items:[],idx:-1};
+function sgHide(){$('sugg').classList.remove('show');$('sugg').innerHTML='';SG={items:[],idx:-1};}
+function sgRender(note){
+  const box=$('sugg');
+  if(!SG.items.length){box.classList.add('show');box.innerHTML=`<div class="sgmeta">${note||'no completion'}</div>`;return;}
+  box.classList.add('show');
+  box.innerHTML=SG.items.map((s,i)=>`<div class="sg${i===SG.idx?' on':''}" onclick="sgPick(${i})">${s.replace(/\t/g,' — ')}</div>`).join('')
+    +(note?`<div class="sgmeta">${note}</div>`:'');
+  const on=box.querySelector('.sg.on');if(on)on.scrollIntoView({block:'nearest'});
+}
+function sgPick(i){
+  const s=SG.items[i];if(s===undefined)return;
+  const v=$('cmd').value;
+  const parts=v.trimStart().split(/\s+/);
+  if(v.endsWith(' '))parts.push('');
+  parts[parts.length-1]=s.split('\t')[0];
+  $('cmd').value=parts.join(' ');
+  sgHide();$('cmd').focus();
+}
+async function sgFetch(){
+  const d=await api('complete',{input:$('cmd').value});
+  SG={items:d.suggestions||[],idx:-1};sgRender(d.note);
+}
+$('cmd').addEventListener('keydown',async e=>{
+  if(e.key==='Enter'){sgHide();runCmd();return;}
+  if(e.key==='Escape'){sgHide();return;}
+  if(e.key==='Tab'){e.preventDefault();
+    if(!SG.items.length){await sgFetch();}
+    if(SG.items.length){SG.idx=(SG.idx+1)%SG.items.length;sgRender();}
+    return;}
+  if((e.key==='ArrowDown'||e.key==='ArrowUp')&&SG.items.length){
+    e.preventDefault();
+    const n=SG.items.length;
+    SG.idx=e.key==='ArrowDown'?(SG.idx+1)%n:(SG.idx-1+n)%n;
+    sgRender();}
+});
+$('cmd').addEventListener('input',()=>{if(SG.items.length)sgHide();});
 
 async function showReport(){
   const d=await api('report');
@@ -492,6 +588,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_check(data)
             if p == "skip":
                 return self._api_skip(data)
+            if p == "complete":
+                return self._json(complete_command(str(data.get("input", ""))))
         self._json({"error": "unknown endpoint"}, 404)
 
     # --- endpoint impls (called under lock) ---

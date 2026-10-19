@@ -96,6 +96,11 @@
       "need": "Decode a secret value",
       "how": "kubectl get secret X -o jsonpath='{.data.key}' | base64 -d",
       "note": "Secrets store values base64-encoded in .data."
+    },
+    {
+      "need": "Activate shell autocompletion (kubectl, helm, kubeadm...)",
+      "how": "bash: source <(kubectl completion bash)\nzsh:  source <(kubectl completion zsh)\nalias k=kubectl && complete -F __start_kubectl k   # completion for the alias\nhelm:    source <(helm completion bash)\nkubeadm: source <(kubeadm completion bash)\ngeneric: any cobra tool -> source <(TOOL completion bash)",
+      "note": "Do this FIRST - 2 minutes that save 20 (2h exam). In THIS web terminal completion is built-in: press Tab (subcommands, flags --, resource types AND live resource names)."
     }
   ],
   "setup_once": [
