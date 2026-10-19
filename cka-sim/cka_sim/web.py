@@ -20,6 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import yaml
 
+from cka_sim import paths
 from cka_sim.cluster import run_shell
 from cka_sim.engine import load_assertions, load_scenarios
 from cka_sim.hints import PENALTY
@@ -472,6 +473,8 @@ async function loadQ(i){
      <button class="ghost" onclick="askHint(4)">Solution (0%)</button>
      <button class="ok" onclick="checkQ()">Check</button>
      <button class="ghost" onclick="skipQ()">Skip</button>
+     <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
+     <button class="ghost" onclick="resetQ()">↻ Reset</button>
    </div>`;
   if(q.status!=='pending'){const d=await api('question',{index:i});
     $('qtext').textContent=d.question;
@@ -497,6 +500,85 @@ async function checkQ(){
 }
 async function skipQ(){
   if(CUR<0)return;await api('skip',{index:CUR});refresh();showReport();
+}
+async function tagQ(){
+  if(CUR<0)return;const d=await api('tag',{index:CUR});
+  $('tagbtn').textContent=d.tagged?'★ Tagged':'★ Tag';
+  refresh();
+}
+async function resetQ(){
+  if(CUR<0)return;const d=await api('reset',{index:CUR});
+  if(d.question){$('qtext').textContent=d.question;$('hints').innerHTML='';}
+  showBanner('Scenario reset');refresh();
+}
+async function switchCert(cert){
+  document.querySelectorAll('.certbtn').forEach(b=>b.classList.remove('active'));
+  $('cert-'+cert).classList.add('active');
+  const d=await api('cert',{cert,exam:'web-exam.yaml'});
+  showBanner(`Loaded ${cert.toUpperCase()} exam — ${d.questions} questions`);
+  refresh();showReport();
+}
+async function switchExam(name){
+  const cert=$('cert-cka').classList.contains('active')?'cka':
+    $('cert-ckad').classList.contains('active')?'ckad':'cks';
+  const d=await api('cert',{cert,exam:name});
+  showBanner(`Loaded ${cert.toUpperCase()} / ${name} — ${d.questions} questions`);
+  refresh();showReport();
+}
+async function loadExams(){
+  try{
+    const d=await api('exams');
+    const sel=$('examselect');
+    sel.innerHTML='<option value="">— exam —</option>';
+    (d.exams||[]).forEach(e=>{
+      const o=document.createElement('option');
+      o.value=e.name;o.textContent=`${e.cert}/${e.name}`;
+      sel.appendChild(o);
+    });
+  }catch(e){console.warn('exams list failed',e)}
+}
+
+// ── Startup modal ──
+let MODAL=null;
+function showStartModal(){
+  if(MODAL)MODAL.remove();
+  MODAL=document.createElement('div');
+  MODAL.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:999';
+  MODAL.innerHTML=`<div style="background:var(--panel);border:1px solid var(--acc);border-radius:12px;padding:32px;min-width:340px;text-align:center">
+    <h2 style="margin:0 0 20px;color:var(--acc)">🎓 Exam Simulator</h2>
+    <div style="margin-bottom:16px">
+      <div style="color:var(--mut);font-size:13px;margin-bottom:8px">Certification</div>
+      <div style="display:flex;gap:8px;justify-content:center">
+        <button class="certbtn active" id="modal-cka" onclick="modalCert('cka')">CKA</button>
+        <button class="certbtn" id="modal-ckad" onclick="modalCert('ckad')">CKAD</button>
+        <button class="certbtn" id="modal-cks" onclick="modalCert('cks')">CKS</button>
+      </div>
+    </div>
+    <div style="margin-bottom:24px">
+      <div style="color:var(--mut);font-size:13px;margin-bottom:8px">Exam</div>
+      <select id="modal-exam" onchange="void 0" style="background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:6px;padding:8px 16px;font-size:14px;width:200px">
+        <option value="web-exam.yaml">web-exam (recommended)</option>
+        <option value="full-exam.yaml">full-exam (all questions)</option>
+      </select>
+    </div>
+    <button class="ok" style="padding:10px 32px;font-size:15px" onclick="startExam()">Start</button>
+  </div>`;
+  document.body.appendChild(MODAL);
+}
+let MODAL_CERT='cka';
+function modalCert(c){
+  MODAL_CERT=c;
+  document.querySelectorAll('[id^="modal-"]').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById('modal-'+c);if(btn)btn.classList.add('active');
+}
+async function startExam(){
+  const exam=$('modal-exam')?$('modal-exam').value:'web-exam.yaml';
+  if(MODAL){MODAL.remove();MODAL=null;}
+  document.querySelectorAll('.certbtn').forEach(b=>b.classList.remove('active'));
+  const hb=document.querySelector('.header .certbtn#cert-'+MODAL_CERT);if(hb)hb.classList.add('active');
+  const d=await api('cert',{cert:MODAL_CERT,exam});
+  showBanner(`${MODAL_CERT.toUpperCase()} / ${exam} — ${d.questions} questions loaded`);
+  refresh();showReport();loadExams();
 }
 async function runCmd(){
   const c=$('cmd').value.trim();if(!c)return;
@@ -578,7 +660,7 @@ async function loadAccess(){
         <code>kubectl port-forward svc/cka-exam 8080:80</code> then open <code>http://localhost:8080</code>.</div>`;
   }catch(e){$('accessbox').textContent='access info unavailable: '+e;}
 }
-refresh();loadCheats();loadAccess();
+refresh();loadCheats();loadAccess();loadExams();showStartModal();
 </script>
 </body>
 </html>
@@ -617,6 +699,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(load_cheatsheet())
         elif self.path == "/api/access":
             self._json(access_info())
+        elif self.path == "/api/exams":
+            self._json({"exams": available_exams()})
         else:
             self._json({"error": "not found"}, 404)
 
@@ -766,9 +850,9 @@ class Handler(BaseHTTPRequestHandler):
         exam_name = str(data.get("exam", "web-exam.yaml")).strip()
         if cert not in ("cka", "ckad", "cks"):
             return self._json({"error": "unknown cert"}, 400)
-        with STATE.lock:
-            STATE.load(cert=cert, exam_name=exam_name)
-            STATE.started_at = None
+        # NOTE: no STATE.lock here — already held by do_POST caller
+        STATE.load(cert=cert, exam_name=exam_name)
+        STATE.started_at = None
         return self._json({"ok": True, "cert": cert, "exam": exam_name,
                            "questions": len(STATE.questions)})
 
