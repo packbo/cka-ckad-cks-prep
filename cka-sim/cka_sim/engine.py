@@ -229,7 +229,10 @@ def run_scenario(
                 results = run_all(_check_assertions(scenario))
                 passed = all(r.passed for r in results) if results else False
                 for i, r in enumerate(results, 1):
-                    (ui.ok if r.passed else ui.fail)(f"[{i}/{len(results)}] {r.detail}")
+                    ui.out("")
+                    (ui.ok if r.passed else ui.fail)(f"[{i}/{len(results)}]")
+                    for line in r.detail.split("\n"):
+                        ui.out(f"   {line.strip()}")
                 if passed:
                     score = _score_of(scenario, hints_used)
                     ui.banner(f"SOLVED  |  score: {score}/{scenario.weight}  (hints lvl {hints_used})")

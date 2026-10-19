@@ -71,6 +71,26 @@ EOF
   kubectl wait --for=condition=Ready nodes --all --timeout=180s
 fi
 
+# --- metrics-server (needed for kubectl top / HPA) ---------------------------
+if ! kubectl -n kube-system get deploy metrics-server >/dev/null 2>&1; then
+  echo "Installing metrics-server (v0.7.2, kind-compatible)..."
+  kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml >/dev/null 2>&1
+  # kind needs: kubelet-insecure-tls + root user (emptyDir cert generation)
+  kubectl -n kube-system patch deploy metrics-server -p='{
+    "spec":{"template":{
+      "spec":{
+        "securityContext":{"runAsUser":0,"runAsNonRoot":false},
+        "containers":[{"name":"metrics-server","args":[
+          "--cert-dir=/tmp","--secure-port=10250",
+          "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
+          "--kubelet-insecure-tls","--metric-resolution=15s"
+        ],"securityContext":{"runAsUser":0,"runAsNonRoot":false,"allowPrivilegeEscalation":false}}]
+      }
+    }
+  }' >/dev/null 2>&1
+  kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s 2>&1 | tail -1
+fi
+
 if ! command -v jq >/dev/null 2>&1; then
   echo "jq not found. Installing jq (needed for paths(scalars) exercises)..."
   as_root apt-get update -qq && as_root apt-get install -y -qq jq || echo "(install jq manually if assertions using jq fail)"
