@@ -1,0 +1,33 @@
+id: rolling-strategy
+title: "Zero-downtime rolling update strategy"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 180
+setup:
+  apply: setup.yaml
+question: |
+  Deployment `legacy` (namespace `ckad`) currently uses the default strategy.
+
+  Change it to a zero-downtime rollout:
+
+  - strategy `RollingUpdate`
+  - `maxUnavailable: 0`
+  - `maxSurge: 1`
+hints:
+  - level: 1
+    text: "Strategy is a Deployment spec field: kubectl edit deploy or kubectl patch."
+  - level: 2
+    text: "kubectl explain deploy.spec.strategy --recursive . One-liner: kubectl patch deploy legacy -n ckad -p '{\"spec\":{\"strategy\":{\"type\":\"RollingUpdate\",\"rollingUpdate\":{\"maxUnavailable\":0,\"maxSurge\":1}}}}'"
+  - level: 3
+    text: "Pitfall: maxUnavailable: 0 means old pods are only killed after new ones are Ready. Verify: kubectl get deploy legacy -n ckad -o jsonpath='{.spec.strategy.rollingUpdate}'"
+  - level: solution
+    text: "kubectl patch deploy legacy -n ckad -p '{\"spec\":{\"strategy\":{\"type\":\"RollingUpdate\",\"rollingUpdate\":{\"maxUnavailable\":0,\"maxSurge\":1}}}}'"
+check:
+  assertions:
+    - run: "kubectl get deploy legacy -n ckad -o jsonpath='{.spec.strategy.type}'"
+      equals: "RollingUpdate"
+    - run: "kubectl get deploy legacy -n ckad -o jsonpath='{.spec.strategy.rollingUpdate.maxUnavailable}'"
+      equals: "0"
+    - run: "kubectl get deploy legacy -n ckad -o jsonpath='{.spec.strategy.rollingUpdate.maxSurge}'"
+      equals: "1"

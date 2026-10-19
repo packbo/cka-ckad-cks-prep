@@ -9,13 +9,9 @@ setup:
 question: |
   In namespace `sched`:
 
-  1. Label exactly ONE node (a worker, not the control-plane) with
-     `disktype=ssd`.
-  2. Create Deployment `cache`: image `redis:7`, 2 replicas, pods labeled
-     `app=cache`, with `nodeSelector: disktype: ssd`.
-
-  Graded final state: both pods run on the SAME single node, that node
-  carries the label, and the template's nodeSelector is set.
+  - label one worker node `disktype=ssd`
+  - create deployment `cache` (image `redis:7`, 2 replicas, pod label
+    `app=cache`) scheduled only on that node via nodeSelector
 hints:
   - level: 1
     text: "Two steps: kubectl label node <worker> disktype=ssd , then a Deployment with spec.template.spec.nodeSelector."

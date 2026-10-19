@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: basics
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: keep-a
+  namespace: basics
+  labels: {keep: "yes"}
+spec:
+  containers: [{name: c, image: nginx:1.21}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: keep-b
+  namespace: basics
+  labels: {keep: "yes"}
+spec:
+  containers: [{name: c, image: nginx:1.21}]
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: junk
+  namespace: basics
+  labels: {keep: "no"}
+spec:
+  containers: [{name: c, image: nginx:1.21}]

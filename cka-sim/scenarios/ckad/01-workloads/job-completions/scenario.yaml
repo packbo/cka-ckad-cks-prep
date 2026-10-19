@@ -1,0 +1,42 @@
+id: job-completions
+title: "Job with completions and parallelism"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `jobs`, create a Job named `report` with image `busybox:1.36`,
+  command `sh -c "echo done"`, completions `3`, parallelism `2`,
+  restartPolicy `Never`.
+hints:
+  - level: 1
+    text: "kubectl create job cannot set completions/parallelism — generate the YAML and edit it."
+  - level: 2
+    text: "kubectl create job report --image=busybox:1.36 -n jobs --dry-run=client -o yaml > job.yaml ; then add completions, parallelism, restartPolicy and the command."
+  - level: 3
+    text: "Job pods need restartPolicy: Never (not the Deployment default Always). Watch: kubectl get jobs,pods -n jobs -w ; done when kubectl get job report -n jobs -o jsonpath='{.status.succeeded}' is 3."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: batch/v1
+      kind: Job
+      metadata: { name: report, namespace: jobs }
+      spec:
+        completions: 3
+        parallelism: 2
+        template:
+          spec:
+            restartPolicy: Never
+            containers:
+            - { name: report, image: busybox:1.36, command: ["sh","-c","echo done"] }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get job report -n jobs -o jsonpath='{.status.succeeded}'"
+      equals: "3"
+    - run: "kubectl get job report -n jobs -o jsonpath='{.spec.completions}'"
+      equals: "3"
+    - run: "kubectl get job report -n jobs -o jsonpath='{.spec.parallelism}'"
+      equals: "2"

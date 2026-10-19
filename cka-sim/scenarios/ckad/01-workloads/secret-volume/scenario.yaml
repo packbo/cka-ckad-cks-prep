@@ -1,0 +1,31 @@
+id: secret-volume
+title: "Mount a Secret as a volume"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad2`:
+
+  1. Create Secret `creds` from literals `user=admin` and `pass=dev123`.
+  2. Create Pod `vault` (image `busybox:1.36`, command `sleep 3600`) mounting the
+     secret read-only at `/etc/creds`.
+hints:
+  - level: 1
+    text: "Secret: kubectl create secret generic --from-literal (repeatable flag). Pod: generate with $do, add the volume + volumeMount."
+  - level: 2
+    text: "kubectl explain pod.spec.volumes.secret --recursive . volumes[0].secret.secretName + volumeMounts readOnly: true."
+  - level: 3
+    text: "Check inside: kubectl exec vault -n ckad2 -- cat /etc/creds/user  (each key becomes a file)."
+  - level: solution
+    text: "kubectl create secret generic creds --from-literal=user=admin --from-literal=pass=dev123 -n ckad2 ; pod yaml with volumes:[{name: sec, secret:{secretName: creds}}] volumeMounts:[{name: sec, mountPath: /etc/creds, readOnly: true}]"
+check:
+  assertions:
+    - run: "kubectl get secret creds -n ckad2 -o jsonpath='{.data.user}'"
+      equals: "YWRtaW4="
+    - run: "kubectl get pod vault -n ckad2 -o jsonpath='{.spec.volumes[0].secret.secretName}'"
+      equals: "creds"
+    - run: "kubectl get pod vault -n ckad2 -o jsonpath='{.spec.containers[0].volumeMounts[0].mountPath}'"
+      equals: "/etc/creds"

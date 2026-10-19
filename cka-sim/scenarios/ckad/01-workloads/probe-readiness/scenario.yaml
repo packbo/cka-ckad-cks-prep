@@ -1,0 +1,31 @@
+id: probe-readiness
+title: "Add a readinessProbe"
+domain: workloads
+weight: 3
+difficulty: easy
+time_estimate: 180
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create Pod `health` (image `nginx:1.21`, name `web`) with a
+  readinessProbe:
+
+  - httpGet on path `/`, port 80
+  - initialDelaySeconds 5, periodSeconds 10
+hints:
+  - level: 1
+    text: "Probes live in the container spec: kubectl explain pod.spec.containers.readinessProbe"
+  - level: 2
+    text: "Generate then edit: kubectl run health --image=nginx:1.21 -n ckad $do > p.yaml , add readinessProbe under containers[0]."
+  - level: 3
+    text: "Verify Ready 1/1 after the delay: kubectl get pod health -n ckad . A wrong port keeps it 0/1 forever — describe shows the probe failing."
+  - level: solution
+    text: "YAML: readinessProbe: {httpGet: {path: /, port: 80}, initialDelaySeconds: 5, periodSeconds: 10}"
+check:
+  assertions:
+    - run: "kubectl get pod health -n ckad -o jsonpath='{.spec.containers[0].readinessProbe.httpGet.path}'"
+      equals: "/"
+    - run: "kubectl get pod health -n ckad -o jsonpath='{.spec.containers[0].readinessProbe.httpGet.port}'"
+      equals: "80"
+    - run: "kubectl get pod health -n ckad -o jsonpath='{.spec.containers[0].readinessProbe.initialDelaySeconds}'"
+      equals: "5"

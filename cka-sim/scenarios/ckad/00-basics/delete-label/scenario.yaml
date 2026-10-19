@@ -1,0 +1,29 @@
+id: delete-label
+title: "Supprimer par label (sans toucher aux autres)"
+domain: basics
+weight: 2
+difficulty: easy
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  Le namespace `basics` contient 3 pods : `keep-a`, `keep-b` (label `keep=yes`)
+  et `junk` (label `keep=no`).
+
+  Supprimer UNIQUEMENT le pod `junk`, en une seule commande, EN UTILISANT
+  le sélecteur de label (pas son nom !).
+hints:
+  - level: 1
+    text: "delete accepte soit un nom, soit un sélecteur : kubectl delete pod -l <label=valeur> -n <ns>"
+  - level: 2
+    text: "D'abord visualise ce que tu vas détruire : kubectl get pods -l keep=no -n basics . Puis la même chose avec delete."
+  - level: 3
+    text: "kubectl delete pod -l keep=no -n basics . Vérifie qu'il reste 2 pods : kubectl get pods -n basics"
+  - level: solution
+    text: "kubectl delete pod -l keep=no -n basics"
+check:
+  assertions:
+    - run: "kubectl get pods -n basics -o json | jq '[.items[].metadata.name]' | jq 'index(\"junk\")'"
+      equals: "null"
+    - run: "kubectl get pods -n basics --no-headers | wc -l | tr -d ' '"
+      equals: "2"

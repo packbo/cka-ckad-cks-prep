@@ -7,14 +7,11 @@ time_estimate: 240
 setup:
   apply: setup.yaml
 question: |
-  In namespace `crash`, the pods of Deployment `crasher` are stuck in
+  The pods of deployment `crasher` in namespace `crash` are stuck in
   `CrashLoopBackOff`.
 
-  1. Diagnose: find WHY they crash (logs + describe).
-  2. Fix it by changing the container command to `sh -c "sleep 3600"`.
-
-  Graded final state: the deployment template runs `sleep 3600`
-  and 1/1 replica is available.
+  Find the cause and fix it so the pods keep running
+  (command `sh -c "sleep 3600"`).
 hints:
   - level: 1
     text: "Two reflexes: kubectl logs deploy/crasher -n crash --previous  and  kubectl describe deploy/crasher -n crash (Events)."

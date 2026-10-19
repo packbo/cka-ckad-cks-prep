@@ -7,18 +7,11 @@ time_estimate: 420
 setup:
   apply: setup.yaml
 question: |
-  In namespace `bluegreen`, `app-blue` (nginx:1.21) is LIVE and receives all
-  traffic through Service `bg-svc` (selector: app=bgapp, version=blue).
+  In namespace `bluegreen`, `app-blue` is live behind service `bg-svc`.
 
-  Perform a blue-green release:
-
-  1. Deploy `app-green`: image `nginx:1.22`, 2 replicas, pods labeled
-     `app=bgapp, version=green` — wait until green is Running (blue untouched).
-  2. Switch ALL traffic to green by changing ONLY the Service selector
-     (version: blue -> green). Blue must keep running (zero downtime).
-
-  Graded final state: green deployment runs nginx:1.22 with 2/2 available,
-  blue still has 2/2 available, bg-svc selects version=green and has endpoints.
+  Deploy `app-green` (image `nginx:1.22`, 2 replicas, pod labels
+  `app=bgapp, version=green`), then switch all traffic to green.
+  Keep blue running.
 hints:
   - level: 1
     text: "Blue-green = two Deployments + one Service. Traffic follows the Service selector — inspect the live setup: kubectl get deploy app-blue -n bluegreen -o yaml"

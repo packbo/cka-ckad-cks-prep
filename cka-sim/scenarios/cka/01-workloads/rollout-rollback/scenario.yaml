@@ -7,13 +7,10 @@ time_estimate: 240
 setup:
   apply: setup.yaml
 question: |
-  In namespace `rollouts`, Deployment `api` (container name: `api`) runs `nginx:1.21`.
+  Deployment `api` (container `api`) in namespace `rollouts` runs `nginx:1.21`.
 
-  1. Update the image to `nginx:1.22` and WAIT until the rollout completes.
-  2. Then ROLL BACK to the previous revision and wait again.
-
-  Graded final state: image back to `nginx:1.21`, 2/2 replicas available,
-  and the revision annotation equal to `3` (one update + one undo).
+  Update the image to `nginx:1.22`, wait for the rollout, then roll back to the
+  previous revision.
 hints:
   - level: 1
     text: "The rollout family: kubectl set image / rollout status / rollout history / rollout undo."

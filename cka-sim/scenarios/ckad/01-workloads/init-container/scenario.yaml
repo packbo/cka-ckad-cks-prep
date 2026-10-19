@@ -1,0 +1,33 @@
+id: init-container
+title: "Pod with an initContainer"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create Pod `init-demo`:
+
+  - initContainer `install` (image `busybox:1.36`) writing `ok` to `/work/index.html`
+    (command: sh -c "echo ok > /work/index.html")
+  - main container `web` (image `nginx:1.21`) mounting the shared emptyDir volume
+    `workdir` at `/usr/share/nginx/html`
+  - the initContainer mounts the same volume at `/work`
+hints:
+  - level: 1
+    text: "initContainers live in their own list, next to containers, in the Pod spec."
+  - level: 2
+    text: "kubectl explain pod.spec.initContainers --recursive | head -30 . Generate the pod with kubectl run $do, then add spec.initContainers and the volume."
+  - level: 3
+    text: "Pitfall: the init container's command must complete (exit 0) or the main container never starts. Verify: kubectl get pod init-demo -n ckad (Running) and kubectl logs init-demo -c install -n ckad"
+  - level: solution
+    text: "YAML: spec.initContainers[{name: install, image: busybox:1.36, command: [sh,-c,'echo ok > /work/index.html'], volumeMounts:[{name: workdir, mountPath: /work}]}] + emptyDir volume workdir shared with nginx."
+check:
+  assertions:
+    - run: "kubectl get pod init-demo -n ckad -o jsonpath='{.spec.initContainers[0].name}'"
+      equals: "install"
+    - run: "kubectl get pod init-demo -n ckad -o jsonpath='{.spec.initContainers[0].image}'"
+      contains: "busybox"
+    - run: "kubectl get pod init-demo -n ckad -o jsonpath='{.status.phase}'"
+      equals: "Running"

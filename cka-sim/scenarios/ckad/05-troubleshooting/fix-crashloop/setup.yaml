@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: crash
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crasher
+  namespace: crash
+  labels:
+    app: crasher
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: crasher
+  template:
+    metadata:
+      labels:
+        app: crasher
+    spec:
+      containers:
+      - name: crasher
+        image: busybox:1.36
+        command: ["sh", "-c", "exit 1"]

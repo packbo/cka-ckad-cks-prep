@@ -1,0 +1,51 @@
+id: pvc-mount
+title: "Create a PVC and mount it in a Pod"
+domain: storage
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `data`, create:
+
+  - a PersistentVolumeClaim `data-pvc` (ReadWriteOnce, 100Mi)
+  - a pod `app` (image `nginx`) mounting it at `/data`
+hints:
+  - level: 1
+    text: "Build the manifests from kubectl explain, not from memory: kubectl explain pvc.spec --recursive  and  kubectl explain pod.spec.volumes.persistentVolumeClaim"
+  - level: 2
+    text: "Two key links to get right: the volumeMount.name MUST equal the volumes[].name, and volumes[].persistentVolumeClaim.claimName MUST equal the PVC name."
+  - level: 3
+    text: "Create the PVC FIRST (else the Pod stays Pending). kind ships a default StorageClass so no PV manifest is needed. Verify: kubectl get pvc -n data (Bound) then kubectl get pod -n data (Running)."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: { name: data-pvc, namespace: data }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 100Mi } }
+      ---
+      apiVersion: v1
+      kind: Pod
+      metadata: { name: app, namespace: data }
+      spec:
+        containers:
+        - name: nginx
+          image: nginx
+          volumeMounts:
+          - { name: data, mountPath: /data }
+        volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: data-pvc }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get pvc data-pvc -n data -o jsonpath='{.status.phase}'"
+      equals: "Bound"
+    - run: "kubectl get pod app -n data -o jsonpath='{.status.phase}'"
+      equals: "Running"
+    - run: "kubectl get pod app -n data -o jsonpath='{.spec.volumes[0].persistentVolumeClaim.claimName}'"
+      contains: "data-pvc"

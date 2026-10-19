@@ -7,15 +7,10 @@ time_estimate: 240
 setup:
   apply: setup.yaml
 question: |
-  In namespace `data`:
+  In namespace `data`, create:
 
-  1. Create a PersistentVolumeClaim named `data-pvc`:
-     - accessModes: `ReadWriteOnce`
-     - storage request: `100Mi`
-  2. Create a Pod named `app` (image `nginx`) that mounts `data-pvc`
-     at `/data` (volume name `data`).
-
-  Both the PVC and the Pod must reach `Bound` / `Running`.
+  - a PersistentVolumeClaim `data-pvc` (ReadWriteOnce, 100Mi)
+  - a pod `app` (image `nginx`) mounting it at `/data`
 hints:
   - level: 1
     text: "Build the manifests from kubectl explain, not from memory: kubectl explain pvc.spec --recursive  and  kubectl explain pod.spec.volumes.persistentVolumeClaim"

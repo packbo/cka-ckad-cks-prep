@@ -1,0 +1,15 @@
+minutes: 120
+threshold: 66
+scenarios:
+  - create-deploy
+  - expose-nodeport
+  - pvc-mount
+  - sidecar-logging
+  - probe-readiness
+  - env-configmap
+  - secret-volume
+  - fix-image-pull
+  - service-no-endpoints
+  - network-policy
+  - canary-deploy
+  - blue-green-deploy

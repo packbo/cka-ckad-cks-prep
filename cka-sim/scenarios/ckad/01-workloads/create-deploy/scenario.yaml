@@ -1,0 +1,31 @@
+id: create-deploy
+title: "Create a Deployment with replicas"
+domain: workloads
+weight: 4
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `apps`, create a Deployment named `web`:
+  - image: `nginx:1.21`
+  - replicas: `3`
+
+  Ensure it reaches `Available`.
+hints:
+  - level: 1
+    text: "Use kubectl create deploy with --image and --replicas. Generate YAML with $do (--dry-run=client -o yaml) rather than writing by hand."
+  - level: 2
+    text: "Confirm the namespace: kubectl config set-context --current --namespace=apps . Then verify Available with: kubectl explain deployment.status --recursive | grep -i available"
+  - level: 3
+    text: "Anti-pitfall: forgetting the namespace is fatal. Verify with: kubectl get deploy web -n apps . Wait for rollout: kubectl rollout status deploy/web -n apps"
+  - level: solution
+    text: "kubectl create deploy web --image=nginx:1.21 --replicas=3 -n apps && kubectl rollout status deploy/web -n apps"
+check:
+  assertions:
+    - run: "kubectl get deploy web -n apps -o jsonpath='{.spec.replicas}'"
+      equals: "3"
+    - run: "kubectl get deploy web -n apps -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      contains: "nginx:1.21"
+    - run: "kubectl get deploy web -n apps -o jsonpath='{.status.availableReplicas}'"
+      equals: "3"

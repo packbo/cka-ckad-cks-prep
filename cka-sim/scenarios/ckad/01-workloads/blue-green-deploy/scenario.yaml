@@ -1,0 +1,39 @@
+id: blue-green-deploy
+title: "Blue-green deployment: switch traffic by selector"
+domain: workloads
+weight: 5
+difficulty: hard
+time_estimate: 420
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `bluegreen`, `app-blue` is live behind service `bg-svc`.
+
+  Deploy `app-green` (image `nginx:1.22`, 2 replicas, pod labels
+  `app=bgapp, version=green`), then switch all traffic to green.
+  Keep blue running.
+hints:
+  - level: 1
+    text: "Blue-green = two Deployments + one Service. Traffic follows the Service selector — inspect the live setup: kubectl get deploy app-blue -n bluegreen -o yaml"
+  - level: 2
+    text: "Fastest green manifest: kubectl get deploy app-blue -n bluegreen -o yaml > green.yaml ; edit name->app-green, version blue->green in BOTH selector.matchLabels and template.metadata.labels, image->nginx:1.22 ; kubectl apply -f green.yaml"
+  - level: 3
+    text: "The switch is a single patch — KEEP app: bgapp: kubectl patch svc bg-svc -n bluegreen -p '{\"spec\":{\"selector\":{\"app\":\"bgapp\",\"version\":\"green\"}}}' . Verify: kubectl get endpoints bg-svc -n bluegreen (green pod IPs) and blue still 2/2."
+  - level: solution
+    text: |
+      kubectl get deploy app-blue -n bluegreen -o yaml > green.yaml
+      # edit: name app-green, labels version=green (selector + template), image nginx:1.22
+      kubectl apply -f green.yaml && kubectl rollout status deploy/app-green -n bluegreen
+      kubectl patch svc bg-svc -n bluegreen -p '{"spec":{"selector":{"app":"bgapp","version":"green"}}}'
+check:
+  assertions:
+    - run: "kubectl get deploy app-green -n bluegreen -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      contains: "nginx:1.22"
+    - run: "kubectl get deploy app-green -n bluegreen -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"
+    - run: "kubectl get deploy app-blue -n bluegreen -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"
+    - run: "kubectl get svc bg-svc -n bluegreen -o jsonpath='{.spec.selector.version}'"
+      equals: "green"
+    - run: "kubectl get endpoints bg-svc -n bluegreen -o jsonpath='{.subsets[*].addresses[*].ip}'"
+      contains: "."

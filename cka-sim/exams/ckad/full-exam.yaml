@@ -1,0 +1,21 @@
+minutes: 120
+threshold: 66
+scenarios:
+  - first-pod
+  - create-deploy
+  - extract-image-deploy
+  - rollout-rollback
+  - blue-green-deploy
+  - canary-deploy
+  - job-completions
+  - sidecar-logging
+  - init-container
+  - probe-readiness
+  - secret-volume
+  - env-configmap
+  - expose-nodeport
+  - ingress-path
+  - network-policy
+  - pvc-mount
+  - fix-image-pull
+  - service-no-endpoints

@@ -1,0 +1,28 @@
+id: fix-image-pull
+title: "Fix a Deployment with a wrong image"
+domain: troubleshooting
+weight: 4
+difficulty: medium
+time_estimate: 180
+setup:
+  apply: setup.yaml
+question: |
+  Deployment `broken` in namespace `ops` was deployed with a TYPO in the image
+  (`ngxnx` instead of `nginx`). Pods are stuck in `ImagePullBackOff`.
+
+  Fix the image to `nginx:1.21` so the Pods reach `Running`.
+hints:
+  - level: 1
+    text: "Don't edit the Pod directly — images are managed by the Deployment. Use kubectl set image."
+  - level: 2
+    text: "Inspect first: kubectl describe deploy broken -n ops | grep -i image  and  kubectl get pods -n ops . The exact container name matters for set image."
+  - level: 3
+    text: "kubectl set image deploy/broken <container>=nginx:1.21 -n ops  then watch: kubectl rollout status deploy/broken -n ops . Confirm: kubectl get pods -n ops (Running)."
+  - level: solution
+    text: "kubectl set image deploy/broken web=nginx:1.21 -n ops && kubectl rollout status deploy/broken -n ops"
+check:
+  assertions:
+    - run: "kubectl get deploy broken -n ops -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      contains: "nginx:1.21"
+    - run: "kubectl get deploy broken -n ops -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"

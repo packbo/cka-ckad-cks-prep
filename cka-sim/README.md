@@ -142,3 +142,57 @@ with `contains:` or `equals:`.
 Pick the bank with `./run.sh --cert cka|ckad|cks …` (or env `CKA_SIM_CERT`).
 In-session navigation (`:back`, `:goto n`) **never resets** a question — your
 changes are kept; `:reset` explicitly re-applies a scenario's setup.
+
+## Official exam blueprints (checked 2026-10 — cncf/curriculum)
+
+Questions are kept **terse on purpose** (exam style); details live in hints,
+and assertions encode the grading.
+
+**CKA v1.37** — 2h: Cluster Architecture, Installation & Configuration 25 ·
+Workloads & Scheduling 15 · Services & Networking 20 · Storage 10 ·
+Troubleshooting 30
+
+**CKAD v1.37** — 2h: Application Design and Build 20 (incl. multi-container
+pods: sidecar/init, volumes) · Application Deployment 20 (**blue/green,
+canary**, rolling updates, Helm, Kustomize) · Application Observability and
+Maintenance 15 · Application Environment, Configuration and Security 25 ·
+Services and Networking 20
+
+**CKS v1.34** (exam env v1.35, requires CKA) — 2h: Cluster Setup 15 ·
+Cluster Hardening 15 · System Hardening 10 · Minimize Microservice
+Vulnerabilities 20 · Supply Chain Security 20 · Monitoring, Logging and
+Runtime Security 20
+
+Sources: github.com/cncf/curriculum · training.linuxfoundation.org
+
+## Two practice modes: solo (no AI) or with an AI tutor
+
+### Solo — 100% offline, no AI involved
+
+The simulator is fully standalone: pick your certification bank and train.
+
+```bash
+./run.sh --cert ckad list      # CKAD bank (27 scenarios today)
+./run.sh --cert ckad exam      # timed 2h CKAD exam (18 questions), scored
+./run.sh --cert ckad run canary-deploy
+./run.sh --cert cka exam       # CKA bank
+./run.sh --cert cks list       # CKS bank (to be filled)
+./run.sh web                   # browser UI (NodePort 30999) — same banks
+```
+
+Nothing calls any AI: hints, scoring and checks all run locally against the
+kind cluster.
+
+### With an AI tutor (opencode / Claude Code / Cursor)
+
+The repo ships `AGENTS.md` rules that turn the AI into an **examiner**:
+
+1. Open a terminal and start a scenario solo (`./run.sh --cert ckad run blue-green-deploy`).
+2. In the AI session, ask it to examine you *without giving the solution* — it
+   follows the hint ladder (orientation → research method → near-solution).
+3. The AI verifies your work **in the real cluster** (it can run kubectl) and
+   corrects your *method*, not just the result.
+4. It can also generate new scenarios (same format), then you validate them
+   with `./run.sh run <id>` (see AGENTS.md workflow).
+
+Rule of thumb: **solo mode grades you, AI mode teaches you.**

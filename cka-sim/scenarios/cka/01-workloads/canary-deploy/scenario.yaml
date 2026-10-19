@@ -7,17 +7,12 @@ time_estimate: 420
 setup:
   apply: setup.yaml
 question: |
-  In namespace `canary`, Deployment `frontend-v1` (nginx:1.21, 4 replicas) is
-  LIVE behind Service `frontend` (selector: app=frontend).
+  In namespace `canary`, `frontend-v1` (4 replicas) is live behind service
+  `frontend` (selector `app=frontend`).
 
-  Ship a CANARY of the new version WITHOUT touching v1 or the Service:
-
-  1. Create Deployment `frontend-canary`, image `nginx:1.22`, exactly 1 replica,
-     whose PODS carry label `app=frontend` (so the Service routes to them too)
-     plus an extra label `track=canary` to tell them apart.
-  2. v1 must keep 4/4 available the whole time.
-
-  Result: 1 canary pod out of 5 total = 20% of the traffic tests 1.22.
+  Create deployment `frontend-canary` with image `nginx:1.22`, 1 replica,
+  pod labels `app=frontend, track=canary`.
+  Do not modify `frontend-v1` or the service.
 hints:
   - level: 1
     text: "A canary rides the SAME service: its pods must match the Service selector (app=frontend). Inspect: kubectl get deploy frontend-v1 -n canary -o yaml"

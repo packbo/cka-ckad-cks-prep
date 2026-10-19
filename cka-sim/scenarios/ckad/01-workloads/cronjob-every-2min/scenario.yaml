@@ -1,0 +1,30 @@
+id: cronjob-every-2min
+title: "CronJob on a precise schedule"
+domain: workloads
+weight: 2
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create a CronJob named `backup`:
+
+  - schedule: every 2 minutes (`*/2 * * * *`)
+  - image `busybox:1.36` running `echo backup done`
+hints:
+  - level: 1
+    text: "There is a generator: kubectl create cronjob --schedule=... Run it with $do to inspect the YAML first."
+  - level: 2
+    text: "kubectl create cronjob backup --image=busybox:1.36 --schedule='*/2 * * * *' -n ckad -- sh -c 'echo backup done'"
+  - level: 3
+    text: "Pitfall: quote the schedule, the shell eats the stars otherwise. Verify: kubectl get cronjob backup -n ckad"
+  - level: solution
+    text: "kubectl create cronjob backup --image=busybox:1.36 --schedule='*/2 * * * *' -n ckad -- sh -c 'echo backup done'"
+check:
+  assertions:
+    - run: "kubectl get cronjob backup -n ckad -o jsonpath='{.spec.schedule}'"
+      equals: "*/2 * * * *"
+    - run: "kubectl get cronjob backup -n ckad -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}'"
+      contains: "busybox"
+    - run: "kubectl get cronjob backup -n ckad -o jsonpath='{.spec.suspend}'"
+      contains: ""
