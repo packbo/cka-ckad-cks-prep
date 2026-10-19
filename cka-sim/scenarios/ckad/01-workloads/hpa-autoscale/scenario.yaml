@@ -1,0 +1,30 @@
+id: hpa-autoscale
+title: "Horizontal Pod Autoscaler"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `scale`, create an HPA `web-hpa` on Deployment `web`
+  that scales between 2 and 8 replicas, targeting 50% CPU.
+hints:
+  - level: 1
+    text: "One-shot command: kubectl autoscale deployment web ... (no YAML needed)."
+  - level: 2
+    text: "kubectl autoscale deploy web --min=2 --max=8 --cpu-percent=50 -n scale --name=web-hpa"
+  - level: 3
+    text: "The deployment must have resource requests defined for CPU (HPA needs a baseline). Verify: kubectl get hpa -n scale (TARGETS column shows cpu:50%)."
+  - level: solution
+    text: |
+      kubectl autoscale deploy web --min=2 --max=8 --cpu-percent=50 -n scale --name=web-hpa
+      kubectl get hpa -n scale
+check:
+  assertions:
+    - run: "kubectl get hpa web-hpa -n scale -o jsonpath='{.spec.minReplicas}'"
+      equals: "2"
+    - run: "kubectl get hpa web-hpa -n scale -o jsonpath='{.spec.maxReplicas}'"
+      equals: "8"
+    - run: "kubectl get hpa web-hpa -n scale -o jsonpath='{.spec.metrics[0].resource.target.averageUtilization}'"
+      equals: "50"

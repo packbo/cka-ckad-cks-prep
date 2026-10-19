@@ -1,0 +1,54 @@
+id: resource-quota
+title: "ResourceQuota and LimitRange for a namespace"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `quota`: create
+
+  - a ResourceQuota `compute` limiting pods to `10`, CPU requests to `4`,
+    CPU limits to `8`, memory requests to `4Gi`, memory limits to `8Gi`
+  - a LimitRange `defaults` setting default CPU request `100m`,
+    default CPU limit `500m`, default memory request `128Mi`,
+    default memory limit `512Mi`
+hints:
+  - level: 1
+    text: "Two separate YAML objects. ResourceQuota caps TOTAL namespace consumption; LimitRange provides per-container defaults."
+  - level: 2
+    text: "ResourceQuota: spec.hard with pods: '10', requests.cpu: '4', limits.cpu: '8', requests.memory: '4Gi', limits.memory: '8Gi'. LimitRange: spec.limits[] with type: Container, defaultRequest + default."
+  - level: 3
+    text: "Verify: kubectl describe resourcequota compute -n quota ; kubectl describe limitrange defaults -n quota . A pod without resources gets the LimitRange defaults automatically."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: v1
+      kind: ResourceQuota
+      metadata: { name: compute, namespace: quota }
+      spec:
+        hard:
+          pods: "10"
+          requests.cpu: "4"
+          requests.memory: 4Gi
+          limits.cpu: "8"
+          limits.memory: 8Gi
+      ---
+      apiVersion: v1
+      kind: LimitRange
+      metadata: { name: defaults, namespace: quota }
+      spec:
+        limits:
+        - type: Container
+          defaultRequest: { cpu: 100m, memory: 128Mi }
+          default: { cpu: 500m, memory: 512Mi }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get resourcequota compute -n quota -o jsonpath='{.spec.hard.pods}'"
+      equals: "10"
+    - run: "kubectl get resourcequota compute -n quota -o jsonpath='{.spec.hard.requests\\.cpu}'"
+      equals: "4"
+    - run: "kubectl get limitrange defaults -n quota -o jsonpath='{.spec.limits[0].defaultRequest.cpu}'"
+      equals: "100m"

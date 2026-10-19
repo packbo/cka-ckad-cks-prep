@@ -58,3 +58,12 @@ Audit date: 2026-10 · Source: github.com/cncf/curriculum (CKA_Curriculum_v1.37.
 systemd debugging require VMs, not kind containers. These competencies are
 covered by `../CKA/reminder.md` (§14 upgrade, §16 troubleshooting) and the
 guides; everything else in the blueprint is hands-on above.
+
+## Gap analysis additions (2026-10, inspired by sv222/k8s-operations-runbook)
+
+| Topic | Scenario |
+|-------|----------|
+| StatefulSet (stable identity, headless svc) | `statefulset-create` |
+| Horizontal Pod Autoscaler | `hpa-autoscale` |
+| ResourceQuota + LimitRange | `resource-quota` |
+| imagePullSecrets (private registry) | `image-pull-secret` |

@@ -31,3 +31,7 @@ scenarios:
   - static-pod
   - kubeadm-token
   - kustomize-apply
+  - statefulset-create
+  - hpa-autoscale
+  - resource-quota
+  - image-pull-secret

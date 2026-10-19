@@ -1,0 +1,50 @@
+id: image-pull-secret
+title: "Pull from a private registry (imagePullSecrets)"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `registry`:
+
+  1. Create a Secret `regcred` of type `kubernetes.io/dockerconfigjson`
+     for registry `private.example.com` with username `user` and
+     password `pass123`.
+  2. Create a pod `app` (image `private.example.com/app:v1`) that uses
+     this secret to pull its image.
+
+  Note: the registry is fictional — the pod will fail to pull, but the
+  configuration is what's graded.
+hints:
+  - level: 1
+    text: "kubectl create secret docker-registry generates the right type automatically."
+  - level: 2
+    text: "kubectl create secret docker-registry regcred --docker-server=private.example.com --docker-username=user --docker-password=pass123 -n registry"
+  - level: 3
+    text: "In the pod spec: spec.imagePullSecrets: [{ name: regcred }]. Discover: kubectl explain pod.spec.imagePullSecrets --recursive"
+  - level: solution
+    text: |
+      kubectl create secret docker-registry regcred \
+        --docker-server=private.example.com \
+        --docker-username=user \
+        --docker-password=pass123 \
+        -n registry
+      kubectl apply -f - <<EOF
+      apiVersion: v1
+      kind: Pod
+      metadata: { name: app, namespace: registry }
+      spec:
+        imagePullSecrets: [{ name: regcred }]
+        containers:
+        - { name: app, image: "private.example.com/app:v1" }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get secret regcred -n registry -o jsonpath='{.type}'"
+      equals: "kubernetes.io/dockerconfigjson"
+    - run: "kubectl get pod app -n registry -o jsonpath='{.spec.imagePullSecrets[0].name}'"
+      equals: "regcred"
+    - run: "kubectl get pod app -n registry -o jsonpath='{.spec.containers[0].image}'"
+      contains: "private.example.com"

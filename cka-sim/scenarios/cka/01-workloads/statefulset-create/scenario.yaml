@@ -1,0 +1,39 @@
+id: statefulset-create
+title: StatefulSet with headless Service (stable identity)
+domain: workloads
+weight: 4
+difficulty: hard
+time_estimate: 360
+setup:
+  apply: setup.yaml
+question: "In namespace `stateful`: create a headless Service `web` (port 80) and\
+  \ a\n  StatefulSet `web` (image `nginx:1.21`, 3 replicas) whose pods use the\n \
+  \ service for stable network identities."
+hints:
+- level: 1
+  text: 'A StatefulSet REQUIRES a headless Service (clusterIP: None) for DNS. Two
+    objects to create.'
+- level: 2
+  text: 'Headless svc: kubectl create svc clusterip web --clusterip=None --tcp=80:80
+    -n stateful $do ; StatefulSet has NO kubectl create command — write the YAML (apiVersion
+    apps/v1, kind StatefulSet, serviceName: web).'
+- level: 3
+  text: 'StatefulSet pods get ordinal names: web-0, web-1, web-2 — each with a stable
+    DNS <pod>.<svc>.<ns>.svc.cluster.local. Verify: kubectl get pods -n stateful -w
+    (ordered startup 0→1→2).'
+- level: solution
+  text: "kubectl apply -f - <<EOF\napiVersion: v1\nkind: Service\nmetadata: { name:\
+    \ web, namespace: stateful }\nspec:\n  clusterIP: None\n  selector: { app: web\
+    \ }\n  ports: [{ port: 80 }]\n---\napiVersion: apps/v1\nkind: StatefulSet\nmetadata:\
+    \ { name: web, namespace: stateful }\nspec:\n  serviceName: web\n  replicas: 3\n\
+    \  selector: { matchLabels: { app: web } }\n  template:\n    metadata: { labels:\
+    \ { app: web } }\n    spec:\n      containers:\n      - { name: nginx, image:\
+    \ nginx:1.21, ports: [{ containerPort: 80 }] }\nEOF"
+check:
+  assertions:
+  - run: kubectl get sts web -n stateful -o jsonpath='{.spec.serviceName}'
+    equals: web
+  - run: kubectl get svc web -n stateful -o jsonpath='{.spec.clusterIP}'
+    equals: None
+  - run: kubectl get sts web -n stateful -o jsonpath='{.status.readyReplicas}'
+    equals: '3'

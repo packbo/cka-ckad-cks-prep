@@ -19,3 +19,5 @@ scenarios:
   - pvc-mount
   - fix-image-pull
   - service-no-endpoints
+  - statefulset-create
+  - image-pull-secret
