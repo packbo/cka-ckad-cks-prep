@@ -1,0 +1,33 @@
+id: static-pod
+title: "Create a static Pod via the manifests directory"
+domain: cluster-architecture
+weight: 4
+difficulty: hard
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  Create a static pod named `static-web` (image `nginx:1.21`) on node
+  `cka-sim-worker` by placing its manifest in the node's manifests directory.
+hints:
+  - level: 1
+    text: "Static pods are read by the kubelet from /etc/kubernetes/manifests — the API server only OBSERVES them (read-only mirror pod named <name>-<node>)."
+  - level: 2
+    text: "kind nodes are Docker containers: copy the manifest in with docker cp, then use docker exec to place it: docker exec cka-sim-worker mkdir -p /etc/kubernetes/manifests"
+  - level: 3
+    text: "Write the pod YAML on your host, then: docker cp static-web.yaml cka-sim-worker:/etc/kubernetes/manifests/ . The pod appears automatically as static-web-cka-sim-worker (Running)."
+  - level: solution
+    text: |
+      cat > static-web.yaml <<EOF
+      apiVersion: v1
+      kind: Pod
+      metadata: { name: static-web }
+      spec:
+        containers: [{ name: web, image: nginx:1.21 }]
+      EOF
+      docker cp static-web.yaml cka-sim-worker:/etc/kubernetes/manifests/
+      kubectl get pod static-web-cka-sim-worker
+check:
+  assertions:
+    - run: "kubectl get pod static-web-cka-sim-worker -o jsonpath='{.status.phase}'"
+      equals: "Running"

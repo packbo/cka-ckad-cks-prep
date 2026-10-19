@@ -1,0 +1,61 @@
+id: storage-class
+title: "StorageClass (WaitForFirstConsumer) + PVC + consumer Pod"
+domain: storage
+weight: 4
+difficulty: hard
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `fast`:
+
+  - create StorageClass `fast-disks` using the cluster's local-path
+    provisioner, with `volumeBindingMode: WaitForFirstConsumer`
+  - create PVC `fast-pvc` (ReadWriteOnce, 100Mi) using it
+  - create pod `fast-app` (image `nginx:1.21`) mounting it at `/data`
+
+  Note: with WaitForFirstConsumer the PVC stays Pending until the pod exists.
+hints:
+  - level: 1
+    text: "Reuse the cluster's provisioner name: kubectl get sc -o yaml | grep -i provisioner (rancher.io/local-path on kind)."
+  - level: 2
+    text: "SC keys: provisioner + volumeBindingMode: WaitForFirstConsumer. PVC selects it via storageClassName: fast-disks."
+  - level: 3
+    text: "If the PVC stays Pending: that is WFC working — bind happens when the consuming pod is scheduled. Check kubectl get pvc -n fast -w while you create the pod."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata: { name: fast-disks }
+      provisioner: rancher.io/local-path
+      volumeBindingMode: WaitForFirstConsumer
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: { name: fast-pvc, namespace: fast }
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: fast-disks
+        resources: { requests: { storage: 100Mi } }
+      ---
+      apiVersion: v1
+      kind: Pod
+      metadata: { name: fast-app, namespace: fast }
+      spec:
+        containers:
+        - { name: web, image: nginx:1.21, volumeMounts: [{ name: data, mountPath: /data }] }
+        volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: fast-pvc }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get sc fast-disks -o jsonpath='{.provisioner}'"
+      equals: "rancher.io/local-path"
+    - run: "kubectl get sc fast-disks -o jsonpath='{.volumeBindingMode}'"
+      equals: "WaitForFirstConsumer"
+    - run: "kubectl get pvc fast-pvc -n fast -o jsonpath='{.status.phase}'"
+      equals: "Bound"
+    - run: "kubectl get pod fast-app -n fast -o jsonpath='{.status.phase}'"
+      equals: "Running"

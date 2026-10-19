@@ -1,0 +1,26 @@
+id: headless-service
+title: "Create a headless Service"
+domain: services-networking
+weight: 3
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  Deployment `web` runs in namespace `mesh`. Create a HEADLESS service named
+  `web-headless` (port 80) selecting its pods.
+hints:
+  - level: 1
+    text: "Headless = no ClusterIP load-balancing; each pod gets its own DNS record."
+  - level: 2
+    text: "It is a normal Service with spec.clusterIP set to None. Discover: kubectl explain service.spec.clusterIP"
+  - level: 3
+    text: "One-liner: kubectl expose deploy web --name=web-headless --port=80 --cluster-ip=None -n mesh . Verify: kubectl get svc web-headless -n mesh (CLUSTER-IP must show None) and endpoints exist."
+  - level: solution
+    text: "kubectl expose deploy web --name=web-headless --port=80 --cluster-ip=None -n mesh && kubectl get svc,ep web-headless -n mesh"
+check:
+  assertions:
+    - run: "kubectl get svc web-headless -n mesh -o jsonpath='{.spec.clusterIP}'"
+      equals: "None"
+    - run: "kubectl get endpoints web-headless -n mesh -o jsonpath='{.subsets[*].addresses[*].ip}'"
+      contains: "."

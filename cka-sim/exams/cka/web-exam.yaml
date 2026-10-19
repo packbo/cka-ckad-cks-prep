@@ -13,3 +13,7 @@ scenarios:
   - blue-green-deploy
   - canary-deploy
   - fix-crashloop
+  - headless-service
+  - storage-class
+  - fix-pending-pvc
+  - daemonset-node-labels

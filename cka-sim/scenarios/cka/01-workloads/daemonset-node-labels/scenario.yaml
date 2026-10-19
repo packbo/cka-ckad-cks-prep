@@ -1,0 +1,41 @@
+id: daemonset-node-labels
+title: "DaemonSet on labeled nodes only"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `agents`: label node `cka-sim-worker2` `role=monitoring`, then
+  create a DaemonSet `log-agent` (image `busybox:1.36`, command
+  `sh -c "sleep 3600"`) that runs ONLY on nodes with that label.
+hints:
+  - level: 1
+    text: "DaemonSets have no kubectl create command — generate from a Deployment: kubectl create deploy ... $do, then change kind to DaemonSet (drop replicas)."
+  - level: 2
+    text: "Node placement: spec.template.spec.nodeSelector with role: monitoring. Label first: kubectl label node cka-sim-worker2 role=monitoring"
+  - level: 3
+    text: "Verify count: DaemonSet desiredscheduled must be 1 (only the labeled node): kubectl get ds log-agent -n agents . A pod per node appears automatically."
+  - level: solution
+    text: |
+      kubectl label node cka-sim-worker2 role=monitoring
+      kubectl apply -f - <<EOF
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata: { name: log-agent, namespace: agents }
+      spec:
+        selector: { matchLabels: { app: log-agent } }
+        template:
+          metadata: { labels: { app: log-agent } }
+          spec:
+            nodeSelector: { role: monitoring }
+            containers:
+            - { name: agent, image: busybox:1.36, command: ["sh","-c","sleep 3600"] }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get ds log-agent -n agents -o jsonpath='{.spec.template.spec.nodeSelector.role}'"
+      equals: "monitoring"
+    - run: "kubectl get pods -n agents -l app=log-agent -o json | jq '[.items[] | select(.status.phase==\"Running\" and .metadata.deletionTimestamp == null)] | length'"
+      equals: "1"

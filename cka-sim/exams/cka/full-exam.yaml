@@ -23,3 +23,11 @@ scenarios:
   - job-completions
   - fix-crashloop
   - node-selector-schedule
+  - daemonset-node-labels
+  - node-affinity
+  - headless-service
+  - storage-class
+  - fix-pending-pvc
+  - static-pod
+  - kubeadm-token
+  - kustomize-apply

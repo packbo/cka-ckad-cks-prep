@@ -1,0 +1,1 @@
+# No cluster resources: kubeadm runs inside the control-plane container.

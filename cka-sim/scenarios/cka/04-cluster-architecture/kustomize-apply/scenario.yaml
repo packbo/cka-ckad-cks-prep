@@ -1,0 +1,41 @@
+id: kustomize-apply
+title: "Deploy with Kustomize (namespace + common labels)"
+domain: cluster-architecture
+weight: 3
+difficulty: medium
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  Base manifests for a deployment `app` and its service live in
+  `scenarios/cka/04-cluster-architecture/kustomize-apply/k8s-base/`.
+
+  Using Kustomize ONLY (no manual edits to the base), deploy them into
+  namespace `kust` with the label `team=platform` added to all resources.
+hints:
+  - level: 1
+    text: "Kustomize config file is kustomization.yaml; kubectl applies it with -k instead of -f."
+  - level: 2
+    text: "In that k8s-base/ directory write kustomization.yaml with: namespace: kust, resources: [deployment.yaml], commonLabels: team: platform. Inspect the base first: cat scenarios/cka/04-cluster-architecture/kustomize-apply/k8s-base/deployment.yaml"
+  - level: 3
+    text: "Then: kubectl apply -k scenarios/cka/04-cluster-architecture/kustomize-apply/k8s-base/ . Verify the label landed: kubectl get deploy,svc -n kust --show-labels"
+  - level: solution
+    text: |
+      cd scenarios/cka/04-cluster-architecture/kustomize-apply/k8s-base
+      cat > kustomization.yaml <<EOF
+      namespace: kust
+      resources:
+      - deployment.yaml
+      commonLabels:
+        team: platform
+      EOF
+      kubectl apply -k .
+      cd -
+check:
+  assertions:
+    - run: "kubectl get deploy app -n kust -o jsonpath='{.metadata.labels.team}'"
+      equals: "platform"
+    - run: "kubectl get svc app -n kust -o jsonpath='{.metadata.labels.team}'"
+      equals: "platform"
+    - run: "kubectl get deploy app -n kust -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"

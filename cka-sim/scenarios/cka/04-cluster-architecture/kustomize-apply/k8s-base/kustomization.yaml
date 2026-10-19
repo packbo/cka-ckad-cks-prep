@@ -1,0 +1,5 @@
+namespace: kust
+resources:
+- deployment.yaml
+commonLabels:
+  team: platform

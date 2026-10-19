@@ -1,0 +1,47 @@
+id: node-affinity
+title: "Schedule with node affinity"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `sched`: label node `cka-sim-worker` `tier=gold`, then create
+  deployment `api` (image `nginx:1.21`, 2 replicas, pod label `app=api`)
+  scheduled only on nodes with `tier In [gold]` using REQUIRED node affinity.
+hints:
+  - level: 1
+    text: "Affinity lives at spec.template.spec.affinity.nodeAffinity — discover it: kubectl explain pod.spec.affinity --recursive | head -30"
+  - level: 2
+    text: "requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0]: key tier, operator In, values [gold]."
+  - level: 3
+    text: "Generate then patch is fragile for nested affinity — write the deployment YAML ($do from kubectl create deploy) and add the affinity block. Verify placement: kubectl get pods -n sched -o wide (all on cka-sim-worker)."
+  - level: solution
+    text: |
+      kubectl label node cka-sim-worker tier=gold
+      kubectl apply -f - <<EOF
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: api, namespace: sched }
+      spec:
+        replicas: 2
+        selector: { matchLabels: { app: api } }
+        template:
+          metadata: { labels: { app: api } }
+          spec:
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - { key: tier, operator: In, values: [gold] }
+            containers:
+            - { name: web, image: nginx:1.21 }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get deploy api -n sched -o json | jq -r '.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key'"
+      equals: "tier"
+    - run: "kubectl get pods -n sched -l app=api -o json | jq '[.items[] | select(.status.phase==\"Running\" and .metadata.deletionTimestamp == null) | .spec.nodeName] | unique | length'"
+      equals: "1"

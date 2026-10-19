@@ -1,0 +1,36 @@
+id: fix-pending-pvc
+title: "Fix a Pod stuck Pending (missing PVC)"
+domain: troubleshooting
+weight: 4
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  Pod `waiter` in namespace `wait` is stuck `Pending`.
+
+  Diagnose why, then fix it by creating the missing storage so the pod runs.
+hints:
+  - level: 1
+    text: "Two reflexes for a Pending pod: kubectl describe pod waiter -n wait (Events) and kubectl get pvc -n wait."
+  - level: 2
+    text: "The event says the PVC 'data-vol' does not exist. Find its expected spec in the pod: kubectl get pod waiter -n wait -o yaml | grep -A5 PersistentVolumeClaim"
+  - level: 3
+    text: "Create PVC data-vol (ReadWriteOnce, 100Mi — match what the pod references; the cluster's default StorageClass provisions it). The pod starts on its own once the volume exists."
+  - level: solution
+    text: |
+      kubectl apply -f - <<EOF
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata: { name: data-vol, namespace: wait }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 100Mi } }
+      EOF
+      kubectl wait --for=condition=Ready pod/waiter -n wait --timeout=120s
+check:
+  assertions:
+    - run: "kubectl get pvc data-vol -n wait -o jsonpath='{.status.phase}'"
+      equals: "Bound"
+    - run: "kubectl get pod waiter -n wait -o jsonpath='{.status.phase}'"
+      equals: "Running"
