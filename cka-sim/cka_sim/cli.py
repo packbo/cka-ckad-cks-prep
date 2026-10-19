@@ -328,50 +328,83 @@ def cmd_web(args):
     import subprocess
 
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if not kind_installed() or not backend.ready():
-        ui.warn("cluster not ready. Run:  bash install.sh && ./run.sh up")
-        return
-    if subprocess.run(["bash", "-c", "command -v docker"], capture_output=True).returncode != 0:
-        ui.warn("docker not found")
+
+    if not backend.ready():
+        ui.warn("no cluster detected. Run:  bash install.sh")
         return
 
-    ui.info("[1/4] building image cka-exam:latest ...")
-    cp = subprocess.run(["docker", "build", "-t", "cka-exam:latest", root], capture_output=True, text=True)
-    if cp.returncode != 0:
-        ui.fail(cp.stdout[-2000:] + cp.stderr[-2000:])
-        return
-
-    ui.info("[2/4] loading image into kind ...")
-    cp = subprocess.run(
-        ["kind", "load", "docker-image", "cka-exam:latest", "--name", backend.CLUSTER_NAME],
-        capture_output=True, text=True,
-    )
-    if cp.returncode != 0:
-        ui.fail(cp.stderr)
-        return
-
-    ui.info("[3/4] deploying cka-exam ...")
-    run = subprocess.run(["kubectl", "apply", "-f", os.path.join(root, "k8s", "exam.yaml")],
-                         capture_output=True, text=True)
-    print(run.stdout.strip())
-    subprocess.run(["kubectl", "rollout", "restart", "deploy/cka-exam"], capture_output=True)
-    subprocess.run(["kubectl", "rollout", "status", "deploy/cka-exam", "--timeout=120s"])
-
-    ui.info("[4/4] retrieving NodePort access ...")
     def _sh(cmd: str) -> str:
         return subprocess.run(["bash", "-c", cmd], capture_output=True, text=True).stdout.strip()
-    port = _sh("kubectl get svc cka-exam -o jsonpath='{.spec.ports[0].nodePort}'")
-    ips = [l for l in _sh(
-        "kubectl get nodes -o jsonpath="
-        "'{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'"
-    ).splitlines() if l]
 
-    ui.banner(f"EXAM WEB UI  |  NodePort {port}")
-    ui.info("Killercoda : open the 'Traffic Port' tab and enter the port above.")
-    for ip in ips:
-        ui.info(f"Local kind : open  http://{ip}:{port}")
-    ui.info("Fallback   : kubectl port-forward svc/cka-exam 8080:80 -> http://localhost:8080")
-    ui.info("The 'Access' tab inside the UI repeats these instructions.")
+    ctx = _sh("kubectl config current-context")
+    is_kind = ctx.startswith("kind-") or kind_installed() and _sh("kind get clusters 2>/dev/null | grep -q . && echo yes") == "yes"
+
+    if is_kind:
+        # ── kind path: build image → load into kind → deploy as pod ──
+        if subprocess.run(["bash", "-c", "command -v docker"], capture_output=True).returncode != 0:
+            ui.warn("docker not found")
+            return
+
+        ui.info("[1/4] building image cka-exam:latest ...")
+        cp = subprocess.run(["docker", "build", "-t", "cka-exam:latest", root], capture_output=True, text=True)
+        if cp.returncode != 0:
+            ui.fail(cp.stdout[-2000:] + cp.stderr[-2000:])
+            return
+
+        ui.info("[2/4] loading image into kind ...")
+        cp = subprocess.run(
+            ["kind", "load", "docker-image", "cka-exam:latest", "--name", backend.CLUSTER_NAME],
+            capture_output=True, text=True,
+        )
+        if cp.returncode != 0:
+            ui.fail(cp.stderr)
+            return
+
+        ui.info("[3/4] deploying cka-exam ...")
+        run = subprocess.run(["kubectl", "apply", "-f", os.path.join(root, "k8s", "exam.yaml")],
+                             capture_output=True, text=True)
+        print(run.stdout.strip())
+        subprocess.run(["kubectl", "rollout", "restart", "deploy/cka-exam"], capture_output=True)
+        subprocess.run(["kubectl", "rollout", "status", "deploy/cka-exam", "--timeout=120s"])
+
+        ui.info("[4/4] retrieving NodePort access ...")
+        port = _sh("kubectl get svc cka-exam -o jsonpath='{.spec.ports[0].nodePort}'")
+        ips = [l for l in _sh(
+            "kubectl get nodes -o jsonpath="
+            "'{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'"
+        ).splitlines() if l]
+
+        ui.banner(f"EXAM WEB UI  |  NodePort {port}")
+        ui.info("Killercoda : open the 'Traffic Port' tab and enter the port above.")
+        for ip in ips:
+            ui.info(f"Local kind : open  http://{ip}:{port}")
+        ui.info("Fallback   : kubectl port-forward svc/cka-exam 8080:80 -> http://localhost:8080")
+        ui.info("The 'Access' tab inside the UI repeats these instructions.")
+    else:
+        # ── existing cluster (Killercoda, GKE, EKS...): run locally ──
+        # No docker/kind needed — the web server runs as a local Python process
+        # using the current kubectl context.
+        ui.info("existing cluster detected — running web server locally ...")
+        web_port = os.environ.get("CKA_SIM_WEB_PORT", "8080")
+        ui.banner(f"EXAM WEB UI  |  http://localhost:{web_port}")
+        ui.info(f"Killercoda : open the 'Traffic Port' tab and enter port {web_port}.")
+        ui.info("The server uses your current kubectl context directly.")
+        ui.info("Press Ctrl+C to stop.")
+
+        env_vars = dict(os.environ)
+        cert = paths.active_cert()
+        env_vars["CKA_SIM_CERT"] = cert
+        env_vars["CKA_SIM_WEB_PORT"] = web_port
+        env_vars["PYTHONPATH"] = root
+        try:
+            proc = subprocess.Popen(
+                ["python3", "-m", "cka_sim.web"],
+                cwd=root, env=env_vars,
+            )
+            proc.wait()
+        except KeyboardInterrupt:
+            proc.terminate()
+            ui.ok("web server stopped")
 
 
 def cmd_webstop(args):

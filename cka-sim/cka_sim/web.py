@@ -29,6 +29,18 @@ _CERT = os.environ.get("CKA_SIM_CERT", "cka")
 EXAM_FILE = os.environ.get("CKA_SIM_EXAM", f"{_CERT}/web-exam.yaml")
 PORT = int(os.environ.get("CKA_SIM_WEB_PORT", "8080"))
 
+
+def available_exams() -> list:
+    """List all exam yaml files across all certs."""
+    import glob
+    exams = []
+    for f in sorted(glob.glob(os.path.join(EXAMS_ROOT, "*", "*.yaml"))):
+        rel = os.path.relpath(f, EXAMS_ROOT)
+        cert = rel.split(os.sep)[0] if os.sep in rel else "?"
+        name = os.path.basename(f).replace(".yaml", "")
+        exams.append({"cert": cert, "name": name, "path": rel})
+    return exams
+
 DOC_LINKS = [
     ("kubectl Cheat Sheet", "https://kubernetes.io/docs/reference/kubectl/cheatsheet/"),
     ("JSONPath reference", "https://kubernetes.io/docs/reference/kubectl/jsonpath/"),
@@ -57,9 +69,18 @@ class ExamState:
         self.threshold = 66
         self.advisory = ""
         self.env = {"nodes": 0, "workers": 0}
+        self.cert = _CERT
+        self.exam_name = "web-exam.yaml"
 
-    def load(self) -> None:
-        exam_path = EXAM_FILE if os.path.isabs(EXAM_FILE) else os.path.join(EXAMS_ROOT, EXAM_FILE)
+    def load(self, cert=None, exam_name=None) -> None:
+        global EXAM_FILE
+        if cert:
+            paths.set_cert(cert)
+            self.cert = cert
+        if exam_name:
+            self.exam_name = exam_name
+        EXAM_FILE = f"{self.cert}/{self.exam_name}"
+        exam_path = os.path.join(EXAMS_ROOT, EXAM_FILE)
         with open(exam_path) as fh:
             exam = yaml.safe_load(fh)
         self.minutes = int(exam.get("minutes", 120))
@@ -94,6 +115,8 @@ class ExamState:
                 "elapsed": self.elapsed(),
                 "advisory": self.advisory,
                 "env": self.env,
+                "cert": self.cert,
+                "examName": self.exam_name,
                 "questions": [
                     {
                         "index": i,
@@ -148,6 +171,14 @@ def load_cheatsheet() -> dict:
             return json.load(fh)
     except FileNotFoundError:
         return {"research_methods": []}
+
+
+def _tag_or_untag(scenario_id: str, tag: bool, note=None):
+    from cka_sim import review as _review
+    if tag:
+        _review.tag(scenario_id, note)
+    else:
+        _review.untag(scenario_id)
 
 
 def access_info() -> dict:
@@ -296,6 +327,9 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .docs li{padding:9px 0;border-bottom:1px solid var(--line)}
   .docs a{color:var(--acc);text-decoration:none;font-size:15px}
   .docs a:hover{text-decoration:underline}
+  .certbtn{background:transparent;border:1px solid var(--line);color:var(--mut);padding:4px 10px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+  .certbtn.active{background:var(--acc);color:#08121f;border-color:var(--acc)}
+  .certbtn:hover:not(.active){color:var(--txt);border-color:var(--acc)}
   .suggbox{position:relative;margin-top:6px;max-height:200px;overflow:auto;background:#0b101c;
            border:1px solid var(--line);border-radius:8px;display:none}
   .suggbox.show{display:block}
@@ -311,6 +345,12 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 <header>
   <h1>CKA Exam Simulator</h1>
   <span id="portchip" title="NodePort to enter in the traffic-port tab" style="display:none;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-family:ui-monospace,monospace;color:var(--ok);font-size:14px"></span>
+  <span id="certbar" style="display:flex;gap:4px;align-items:center">
+    <button id="cert-cka" class="certbtn active" onclick="switchCert('cka')">CKA</button>
+    <button id="cert-ckad" class="certbtn" onclick="switchCert('ckad')">CKAD</button>
+    <button id="cert-cks" class="certbtn" onclick="switchCert('cks')">CKS</button>
+    <select id="examselect" onchange="switchExam(this.value)" style="background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:4px 8px;font-size:13px"></select>
+  </span>
   <span id="hscore" style="color:var(--mut);font-size:14px"></span>
   <span id="timer">--:--</span>
   <nav class="tabs">
@@ -601,6 +641,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_check(data)
             if p == "skip":
                 return self._api_skip(data)
+            if p == "tag":
+                return self._api_tag(data)
+            if p == "reset":
+                return self._api_reset(data)
+            if p == "cert":
+                return self._api_cert(data)
             if p == "complete":
                 return self._json(complete_command(str(data.get("input", ""))))
         self._json({"error": "unknown endpoint"}, 404)
@@ -690,6 +736,41 @@ class Handler(BaseHTTPRequestHandler):
         if q["status"] != "solved":
             q["status"] = "skipped"
         return self._json({"ok": True})
+
+    def _api_tag(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        from cka_sim import review as _review
+        sid = q["scenario"].id
+        currently = _review.is_tagged(sid)
+        _tag_or_untag(sid, not currently, data.get("note"))
+        return self._json({"ok": True, "tagged": not currently})
+
+    def _api_reset(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        s = q["scenario"]
+        sp = s.setup_fullpath
+        if sp and os.path.exists(sp):
+            run_shell(f"kubectl delete -f {sp} --ignore-not-found --wait=true --timeout=30s", timeout=60)
+            run_shell(f"kubectl apply -f {sp}")
+        q["status"] = "pending"
+        q["hints_used"] = 0
+        from cka_sim import env as _env
+        return self._json({"ok": True, "question": _env.substitute(s.question)})
+
+    def _api_cert(self, data):
+        cert = str(data.get("cert", "cka")).strip().lower()
+        exam_name = str(data.get("exam", "web-exam.yaml")).strip()
+        if cert not in ("cka", "ckad", "cks"):
+            return self._json({"error": "unknown cert"}, 400)
+        with STATE.lock:
+            STATE.load(cert=cert, exam_name=exam_name)
+            STATE.started_at = None
+        return self._json({"ok": True, "cert": cert, "exam": exam_name,
+                           "questions": len(STATE.questions)})
 
 
 def main():
