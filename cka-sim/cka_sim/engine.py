@@ -234,3 +234,8 @@ def _check_assertions(scenario: Scenario) -> list:
         data = yaml.safe_load(fh)
     check = data.get("check") or {}
     return check.get("assertions") or []
+
+
+def load_assertions(scenario: Scenario) -> list:
+    """Public accessor used by the web server."""
+    return _check_assertions(scenario)

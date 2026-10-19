@@ -1,0 +1,592 @@
+"""Web exam server.
+
+Serves the exam UI (questions, hints, checks, terminal box) plus a Cheatsheet
+tab (research methods from data/cheatsheet.json) and a Docs tab with
+kubernetes.io links (opened in a new tab).
+
+Run in-cluster (deployed by ./run.sh web) and access via:
+    kubectl port-forward svc/cka-exam 8080:80   ->   http://localhost:8080
+"""
+from __future__ import annotations
+
+import json
+import os
+import threading
+import time
+from collections import defaultdict
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import yaml
+
+from cka_sim.cluster import run_shell
+from cka_sim.engine import load_assertions, load_scenarios
+from cka_sim.hints import PENALTY
+from cka_sim.paths import CHEATSHEET_PATH, EXAMS_DIR
+
+EXAM_FILE = os.environ.get("CKA_SIM_EXAM", "web-exam.yaml")
+PORT = int(os.environ.get("CKA_SIM_WEB_PORT", "8080"))
+
+DOC_LINKS = [
+    ("kubectl Cheat Sheet", "https://kubernetes.io/docs/reference/kubectl/cheatsheet/"),
+    ("JSONPath reference", "https://kubernetes.io/docs/reference/kubectl/jsonpath/"),
+    ("Pods", "https://kubernetes.io/docs/concepts/workloads/pods/"),
+    ("Deployments", "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"),
+    ("Services", "https://kubernetes.io/docs/concepts/services-networking/service/"),
+    ("Network Policies", "https://kubernetes.io/docs/concepts/services-networking/network-policies/"),
+    ("Persistent Volumes", "https://kubernetes.io/docs/concepts/storage/persistent-volumes/"),
+    ("ConfigMaps", "https://kubernetes.io/docs/concepts/configuration/configmap/"),
+    ("Secrets", "https://kubernetes.io/docs/concepts/configuration/secret/"),
+    ("RBAC", "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"),
+    ("kubeadm upgrade", "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/"),
+    ("etcd backup/restore", "https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/"),
+]
+
+
+# ---------------------------------------------------------------- state ----
+class ExamState:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.started_at = None
+        self.questions = []      # dicts: scenario + status/score/hints
+        self.minutes = 0
+        self.threshold = 66
+
+    def load(self) -> None:
+        with open(os.path.join(EXAMS_DIR, EXAM_FILE)) as fh:
+            exam = yaml.safe_load(fh)
+        self.minutes = int(exam.get("minutes", 120))
+        self.threshold = int(exam.get("threshold", 66))
+        by_id = {s.id: s for s in load_scenarios()}
+        self.questions = []
+        for sid in exam.get("scenarios", []):
+            s = by_id.get(sid)
+            if s is None:
+                continue
+            self.questions.append({
+                "scenario": s,
+                "status": "pending",
+                "score": 0.0,
+                "hints_used": 0,
+            })
+
+    def elapsed(self) -> int:
+        return int(time.time() - self.started_at) if self.started_at else 0
+
+    def public(self) -> dict:
+        with self.lock:
+            return {
+                "minutes": self.minutes,
+                "threshold": self.threshold,
+                "elapsed": self.elapsed(),
+                "questions": [
+                    {
+                        "index": i,
+                        "id": q["scenario"].id,
+                        "title": q["scenario"].title,
+                        "domain": q["scenario"].domain,
+                        "weight": q["scenario"].weight,
+                        "difficulty": q["scenario"].difficulty,
+                        "status": q["status"],
+                        "score": q["score"],
+                        "hints_used": q["hints_used"],
+                    }
+                    for i, q in enumerate(self.questions)
+                ],
+            }
+
+    def report(self) -> dict:
+        with self.lock:
+            total = sum(q["scenario"].weight for q in self.questions)
+            earned = sum(q["score"] for q in self.questions)
+            dom = defaultdict(lambda: [0.0, 0.0])
+            for q in self.questions:
+                dom[q["scenario"].domain][0] += q["score"]
+                dom[q["scenario"].domain][1] += q["scenario"].weight
+            pct = round(earned / total * 100, 1) if total else 0.0
+            return {
+                "earned": round(earned, 2),
+                "total": total,
+                "percent": pct,
+                "passed": pct >= self.threshold,
+                "threshold": self.threshold,
+                "elapsed": self.elapsed(),
+                "domains": [
+                    {"domain": d, "score": v[0], "max": v[1]}
+                    for d, v in sorted(dom.items())
+                ],
+                "questions": [
+                    {"id": q["scenario"].id, "status": q["status"],
+                     "score": q["score"], "weight": q["scenario"].weight,
+                     "hints": q["hints_used"]}
+                    for q in self.questions
+                ],
+            }
+
+
+STATE = ExamState()
+
+
+def load_cheatsheet() -> dict:
+    try:
+        with open(CHEATSHEET_PATH) as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return {"research_methods": []}
+
+
+def access_info() -> dict:
+    """NodePort + node IPs of the current cluster (for the Access tab)."""
+    port = run_shell(
+        "kubectl get svc cka-exam -o jsonpath='{.spec.ports[0].nodePort}'"
+    ).stdout.strip()
+    ips = [
+        line
+        for line in run_shell(
+            "kubectl get nodes -o jsonpath="
+            "'{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'"
+        ).stdout.split()
+        if line
+    ]
+    return {"nodePort": port, "nodeIPs": ips}
+
+
+# ------------------------------------------------------------- kubeconfig --
+def ensure_kubeconfig() -> None:
+    """When running in-cluster, build a kubeconfig from the ServiceAccount."""
+    host = os.environ.get("KUBERNETES_SERVICE_HOST")
+    if not host:
+        return
+    port = os.environ.get("KUBERNETES_SERVICE_PORT_HTTPS",
+                          os.environ.get("KUBERNETES_SERVICE_PORT", "443"))
+    sa = "/var/run/secrets/kubernetes.io/serviceaccount"
+    token = open(os.path.join(sa, "token")).read().strip()
+    home = os.path.expanduser("~")
+    os.makedirs(os.path.join(home, ".kube"), exist_ok=True)
+    cfg = (
+        "apiVersion: v1\nkind: Config\n"
+        f"clusters:\n- cluster:\n    server: https://{host}:{port}\n"
+        f"    certificate-authority: {sa}/ca.crt\n  name: cka\n"
+        "contexts:\n- context:\n    cluster: cka\n    user: sa\n"
+        "    namespace: default\n  name: cka\ncurrent-context: cka\n"
+        "users:\n- name: sa\n  user:\n    token: " + token + "\n"
+    )
+    with open(os.path.join(home, ".kube", "config"), "w") as fh:
+        fh.write(cfg)
+
+
+# ------------------------------------------------------------------- UI ----
+def build_html() -> str:
+    docs_li = "\n".join(
+        f'<li><a href="{url}" target="_blank" rel="noopener">{name} &#8599;</a></li>'
+        for name, url in DOC_LINKS
+    )
+    return HTML_TEMPLATE.replace("__DOCS__", docs_li)
+
+
+HTML_TEMPLATE = r"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CKA Exam Simulator</title>
+<style>
+  :root{--bg:#0f1420;--panel:#1a2233;--panel2:#141b2b;--txt:#dde5f2;--mut:#8b99b0;
+        --acc:#4da3ff;--ok:#3ecf8e;--bad:#ff6b6b;--hint:#c58aff;--line:#28324a}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{display:flex;align-items:center;gap:18px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--line)}
+  header h1{font-size:17px;margin:0;color:var(--acc)}
+  .tabs{display:flex;gap:4px;margin-left:auto}
+  .tab{padding:7px 16px;border-radius:8px 8px 0 0;cursor:pointer;background:transparent;color:var(--mut);border:1px solid transparent;font-size:14px}
+  .tab.active{background:var(--panel2);color:var(--txt);border:1px solid var(--line);border-bottom-color:var(--panel2)}
+  #timer{font-family:ui-monospace,monospace;font-size:16px;color:var(--acc)}
+  main{max-width:1180px;margin:0 auto;padding:18px}
+  .page{display:none}.page.active{display:block}
+  .grid{display:grid;grid-template-columns:1.1fr .9fr;gap:16px}
+  @media(max-width:960px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+  .meta{color:var(--mut);font-size:13px;margin-bottom:8px}
+  .qtext{white-space:pre-wrap;font-size:15px;line-height:1.55;background:var(--panel2);
+         border:1px solid var(--line);border-radius:8px;padding:14px;margin:8px 0}
+  button{background:var(--acc);border:0;color:#08121f;font-weight:600;padding:8px 14px;
+         border-radius:7px;cursor:pointer;font-size:13px;margin:3px 6px 3px 0}
+  button:hover{filter:brightness(1.12)}
+  button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+  button.warn{background:var(--hint);color:#1d1226}
+  button.ok{background:var(--ok)}
+  input.cmd{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+            border-radius:7px;padding:10px 12px;font-family:ui-monospace,monospace;font-size:13px}
+  pre{background:#0b101c;border:1px solid var(--line);border-radius:8px;padding:12px;
+      overflow:auto;font-size:12.5px;max-height:340px;white-space:pre-wrap;word-break:break-word}
+  .hintbox{border-left:3px solid var(--hint);padding:8px 12px;margin:8px 0;background:var(--panel2);border-radius:0 8px 8px 0;white-space:pre-wrap;font-size:14px}
+  .res-ok{color:var(--ok)}.res-bad{color:var(--bad)}
+  .qtable{width:100%;border-collapse:collapse;font-size:13.5px}
+  .qtable td,.qtable th{padding:7px 10px;border-bottom:1px solid var(--line);text-align:left}
+  .st-solved{color:var(--ok)}.st-skipped{color:var(--mut)}.st-active{color:var(--acc)}
+  .st-pending{color:var(--mut)}.st-failed{color:var(--bad)}
+  .cheat{border-left:3px solid var(--acc);padding:10px 14px;margin:10px 0;background:var(--panel2);border-radius:0 8px 8px 0}
+  .cheat .need{font-weight:700;margin-bottom:6px}
+  .cheat code{display:block;background:#0b101c;border:1px solid var(--line);border-radius:6px;
+              padding:8px 10px;margin:6px 0;font-size:12.5px;white-space:pre-wrap;word-break:break-word}
+  .cheat .note{color:var(--mut);font-size:13px}
+  .docs ul{list-style:none;padding:0}
+  .docs li{padding:9px 0;border-bottom:1px solid var(--line)}
+  .docs a{color:var(--acc);text-decoration:none;font-size:15px}
+  .docs a:hover{text-decoration:underline}
+  .bigscore{font-size:42px;font-weight:800}
+  #banner{display:none;background:var(--panel);border:1px solid var(--line);border-radius:10px;
+          padding:18px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1>CKA Exam Simulator</h1>
+  <span id="portchip" title="NodePort to enter in the traffic-port tab" style="display:none;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:4px 10px;font-family:ui-monospace,monospace;color:var(--ok);font-size:14px"></span>
+  <span id="hscore" style="color:var(--mut);font-size:14px"></span>
+  <span id="timer">--:--</span>
+  <nav class="tabs">
+    <div class="tab active" data-p="p-exam">Exam</div>
+    <div class="tab" data-p="p-cheat">Cheatsheet &amp; Hints</div>
+    <div class="tab" data-p="p-docs">Docs</div>
+    <div class="tab" data-p="p-access">Access</div>
+  </nav>
+</header>
+<main>
+
+<section id="p-exam" class="page active">
+  <div id="banner" class="card"></div>
+  <div class="grid">
+    <div>
+      <div class="card" id="qcard">
+        <h3>Question</h3>
+        <div id="qbody"><div class="meta">Press &laquo; Start question &raquo; to begin.</div></div>
+      </div>
+      <div class="card">
+        <h3>Questions</h3>
+        <table class="qtable" id="qtable"></table>
+        <div style="margin-top:10px">
+          <button class="ghost" onclick="showReport()">Refresh report</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Terminal</h3>
+        <input class="cmd" id="cmd" placeholder="kubectl get pods -A   (then Enter)" spellcheck="false">
+        <button onclick="runCmd()">Run</button>
+        <button class="ghost" onclick="clearOut()">Clear</button>
+        <pre id="out"></pre>
+      </div>
+      <div class="card">
+        <h3>Report</h3>
+        <div id="report" class="meta">Start the exam to see the report.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="p-cheat" class="page">
+  <div class="card">
+    <h3>Research methods &mdash; how to find anything</h3>
+    <div class="meta">The exam grades cluster state, not the path. These methods find any field, path or manifest.</div>
+    <div id="cheats"></div>
+  </div>
+</section>
+
+<section id="p-docs" class="page docs">
+  <div class="card">
+    <h3>kubernetes.io &mdash; allowed during the exam</h3>
+    <div class="meta">Links open in a new tab. Use Ctrl+F inside a page to jump to the example you need.</div>
+    <ul>
+__DOCS__
+    </ul>
+  </div>
+</section>
+
+<section id="p-access" class="page">
+  <div class="card">
+    <h3>How to open this UI &mdash; traffic port</h3>
+    <div id="accessbox" class="meta">Loading...</div>
+  </div>
+</section>
+
+</main>
+<script>
+let CUR=-1;
+const $=id=>document.getElementById(id);
+
+document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');$(t.dataset.p).classList.add('active');
+}));
+
+async function api(path,body){
+  const r=await fetch('/api/'+path,{method:body?'POST':'GET',
+    headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  return r.json();
+}
+
+async function refresh(){const s=await api('state');renderState(s);}
+function renderState(s){
+  let got=0,max=0;
+  const rows=s.questions.map(q=>{got+=q.score;max+=q.weight;
+    return `<tr style="cursor:pointer" onclick="loadQ(${q.index})">
+      <td>${q.index+1}</td><td>${q.id}</td><td>${q.domain}</td>
+      <td class="st-${q.status}">${q.status}</td>
+      <td>${q.score}/${q.weight}</td><td>${q.hints_used||'-'}</td></tr>`;}).join('');
+  $('qtable').innerHTML='<tr><th>#</th><th>id</th><th>domain</th><th>status</th><th>score</th><th>hints</th></tr>'+rows;
+  $('hscore').textContent=`score ${got.toFixed(1)} / ${max}`;
+  window.EXAM_MIN=s.minutes;window.ELAPSED=s.elapsed;
+}
+setInterval(()=>{if(window.EXAM_MIN===undefined)return;
+  const left=Math.max(0,window.EXAM_MIN*60-window.ELAPSED);window.ELAPSED+=1;
+  if(left<=0){$('timer').textContent='00:00';return;}
+  const h=Math.floor(left/3600),m=Math.floor(left%3600/60),s2=left%60;
+  $('timer').textContent=(h?h+':':'')+String(m).padStart(2,'0')+':'+String(s2).padStart(2,'0');
+},1000);
+
+async function loadQ(i){
+  const s=await api('state');const q=s.questions[i];if(!q)return;
+  CUR=i;
+  $('qbody').innerHTML=`<div class="meta">${q.domain} &middot; weight ${q.weight}% &middot; ${q.difficulty} &middot; status: <span class="st-${q.status}">${q.status}</span></div>
+   <div class="qtext" id="qtext">Press Start to load the question and its setup.</div>
+   <div id="hints"></div>
+   <div style="margin-top:10px">
+     <button class="ok" onclick="startQ(${i})">Start question</button>
+     <button class="warn" onclick="askHint(1)">Hint 1 (-10%)</button>
+     <button class="warn" onclick="askHint(2)">Hint 2 (-25%)</button>
+     <button class="warn" onclick="askHint(3)">Hint 3 (-40%)</button>
+     <button class="ghost" onclick="askHint(4)">Solution (0%)</button>
+     <button class="ok" onclick="checkQ()">Check</button>
+     <button class="ghost" onclick="skipQ()">Skip</button>
+   </div>`;
+  if(q.status!=='pending'){const d=await api('question',{index:i});
+    $('qtext').textContent=d.question;
+    if(d.hint_logs) d.hint_logs.forEach(h=>addHintBox(h));}
+}
+async function startQ(i){
+  const d=await api('start',{index:i});
+  $('qtext').textContent=d.question;$('hints').innerHTML='';
+  out('');refresh();
+}
+async function askHint(level){
+  if(CUR<0)return;const d=await api('hint',{index:CUR,level});
+  addHintBox(d.text);refresh();
+}
+function addHintBox(t){const div=document.createElement('div');div.className='hintbox';
+  div.textContent=t;$('hints').appendChild(div);}
+async function checkQ(){
+  if(CUR<0)return;const d=await api('check',{index:CUR});
+  const lines=d.results.map(r=>`<div class="${r.passed?'res-ok':'res-bad'}">${r.passed?'PASS':'FAIL'} &mdash; ${r.detail}</div>`).join('');
+  $('hints').innerHTML+='<div class="hintbox">'+lines+`<div><b>${d.passed?'SOLVED':'Not yet'}</b> &mdash; score ${d.score}/${d.weight}</div></div>`;
+  if(d.passed){showBanner(`SOLVED &mdash; ${d.score}/${d.weight} points`);}
+  refresh();showReport();
+}
+async function skipQ(){
+  if(CUR<0)return;await api('skip',{index:CUR});refresh();showReport();
+}
+async function runCmd(){
+  const c=$('cmd').value.trim();if(!c)return;
+  const d=await api('cmd',{command:c});
+  out((d.stdout||'')+(d.stderr?(d.stderr:''):'')+(d.rc?`\n[exit ${d.rc}]`:''));
+}
+function out(t){$('out').textContent=t||' ';}
+function clearOut(){out('');}
+$('cmd').addEventListener('keydown',e=>{if(e.key==='Enter')runCmd();});
+
+async function showReport(){
+  const d=await api('report');
+  const dom=d.domains.map(x=>`<tr><td>${x.domain}</td><td>${x.score.toFixed(1)}</td><td>${x.max}</td></tr>`).join('');
+  const qs=d.questions.map(q=>`<tr><td>${q.id}</td><td class="st-${q.status}">${q.status}</td><td>${q.score}/${q.weight}</td><td>${q.hints||'-'}</td></tr>`).join('');
+  $('report').innerHTML=`<div class="bigscore" style="color:${d.passed?'var(--ok)':'var(--bad)'}">${d.percent}%</div>
+   <div class="meta">${d.earned.toFixed(1)} / ${d.total} points &middot; threshold ${d.threshold}% &middot; ${d.passed?'PASS':'BELOW PASS'}</div>
+   <table class="qtable"><tr><th>domain</th><th>score</th><th>max</th></tr>${dom}</table>
+   <table class="qtable" style="margin-top:10px"><tr><th>question</th><th>status</th><th>score</th><th>hints</th></tr>${qs}</table>`;
+}
+function showBanner(t){$('banner').style.display='block';$('banner').innerHTML=`<div style="font-size:20px;font-weight:700">${t}</div>`;}
+
+async function loadCheats(){
+  const d=await api('cheatsheet');
+  $('cheats').innerHTML=(d.research_methods||[]).map(c=>
+   `<div class="cheat"><div class="need">${c.need}</div><code>${c.how}</code><div class="note">${c.note}</div></div>`).join('');
+}
+async function loadAccess(){
+  try{
+    const d=await api('access');
+    if(d.nodePort){$('portchip').style.display='inline-block';$('portchip').textContent='port '+d.nodePort;}
+    const ips=(d.nodeIPs||[]).map(ip=>`<li><code>http://${ip}:${d.nodePort}</code></li>`).join('');
+    $('accessbox').innerHTML=`
+      <div style="font-size:34px;font-weight:800;color:var(--ok);font-family:ui-monospace,monospace">${d.nodePort}</div>
+      <div class="meta">Service <code>cka-exam</code> is exposed as <b>NodePort</b> (any port 30000&ndash;32767 works this way).</div>
+      <div class="cheat"><div class="need">On Killercoda</div>
+        Open the <b>Traffic Port</b> tab (right of the Terminal tab), enter <b>${d.nodePort}</b> and confirm &mdash;
+        the page is then served at <code>https://&lt;session-id&gt;-${d.nodePort}.&lt;your-env-domain&gt;</code>.</div>
+      <div class="cheat"><div class="need">On this local kind cluster</div>
+        Open any node IP at that port in your browser:<ul style="margin:8px 0 0 18px">${ips}</ul>
+        <div class="note">Node IPs are Docker bridges, reachable from the Linux host.</div></div>
+      <div class="cheat"><div class="need">Fallback (port-forward)</div>
+        <code>kubectl port-forward svc/cka-exam 8080:80</code> then open <code>http://localhost:8080</code>.</div>`;
+  }catch(e){$('accessbox').textContent='access info unavailable: '+e;}
+}
+refresh();loadCheats();loadAccess();
+</script>
+</body>
+</html>
+"""
+
+
+# --------------------------------------------------------------- handler --
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *a):  # silence
+        pass
+
+    def _json(self, obj, code=200):
+        body = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _html(self, text):
+        body = text.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path in ("/", "/index.html"):
+            self._html(build_html())
+        elif self.path == "/api/state":
+            self._json(STATE.public())
+        elif self.path == "/api/report":
+            self._json(STATE.report())
+        elif self.path == "/api/cheatsheet":
+            self._json(load_cheatsheet())
+        elif self.path == "/api/access":
+            self._json(access_info())
+        else:
+            self._json({"error": "not found"}, 404)
+
+    def do_POST(self):
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            data = json.loads(self.rfile.read(length) or b"{}")
+        except Exception:
+            return self._json({"error": "bad json"}, 400)
+
+        p = self.path.replace("/api/", "")
+        with STATE.lock:
+            if p == "start":
+                return self._api_start(data)
+            if p == "question":
+                return self._api_question(data)
+            if p == "cmd":
+                return self._api_cmd(data)
+            if p == "hint":
+                return self._api_hint(data)
+            if p == "check":
+                return self._api_check(data)
+            if p == "skip":
+                return self._api_skip(data)
+        self._json({"error": "unknown endpoint"}, 404)
+
+    # --- endpoint impls (called under lock) ---
+    def _q(self, data):
+        i = int(data.get("index", -1))
+        if i < 0 or i >= len(STATE.questions):
+            return None, None
+        return i, STATE.questions[i]
+
+    def _api_start(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        if STATE.started_at is None:
+            STATE.started_at = time.time()
+        s = q["scenario"]
+        if s.setup_fullpath and os.path.exists(s.setup_fullpath):
+            run_shell(f"kubectl apply -f {s.setup_fullpath}")
+        q["status"] = "active"
+        return self._json({"ok": True, "question": s.question})
+
+    def _api_question(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        s = q["scenario"]
+        shown = []
+        for h in s.hints:
+            lvl = h.get("level")
+            lvl_n = 4 if isinstance(lvl, str) else int(lvl)
+            if lvl_n <= q["hints_used"]:
+                shown.append(h.get("text", ""))
+        return self._json({"question": s.question, "hint_logs": shown})
+
+    def _api_cmd(self, data):
+        cmd = str(data.get("command", ""))
+        if not cmd.strip():
+            return self._json({"stdout": "", "stderr": "", "rc": 0})
+        cp = run_shell(cmd, timeout=90)
+        return self._json({"stdout": cp.stdout or "", "stderr": cp.stderr or "", "rc": cp.returncode})
+
+    def _api_hint(self, data):
+        i, q = self._q(data)
+        level = int(data.get("level", 1))
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        s = q["scenario"]
+        for h in s.hints:
+            lvl = h.get("level")
+            lvl_n = 4 if isinstance(lvl, str) else int(lvl)
+            if lvl_n == level:
+                q["hints_used"] = max(q["hints_used"], level)
+                return self._json({"text": h.get("text", ""), "penalty": PENALTY.get(level, 0)})
+        return self._json({"text": "no hint at this level", "penalty": 0})
+
+    def _api_check(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        s = q["scenario"]
+        results = []
+        for a in load_assertions(s):
+            from cka_sim.validator import evaluate
+            r = evaluate(a)
+            results.append({"passed": r.passed, "detail": r.detail})
+        passed = bool(results) and all(r["passed"] for r in results)
+        if passed and q["status"] != "solved":
+            pen = PENALTY.get(q["hints_used"], 0.0) if q["hints_used"] < 4 else 1.0
+            q["score"] = round(max(0.0, s.weight * (1.0 - pen)), 2)
+            q["status"] = "solved"
+        return self._json({
+            "results": results,
+            "passed": passed,
+            "score": q["score"] if passed else 0.0,
+            "weight": s.weight,
+        })
+
+    def _api_skip(self, data):
+        i, q = self._q(data)
+        if q is None:
+            return self._json({"error": "bad index"}, 400)
+        if q["status"] != "solved":
+            q["status"] = "skipped"
+        return self._json({"ok": True})
+
+
+def main():
+    ensure_kubeconfig()
+    STATE.load()
+    if not STATE.questions:
+        print("no scenarios loaded for exam:", EXAM_FILE)
+    print(f"cka-exam web server listening on :{PORT}  (exam: {EXAM_FILE})")
+    srv = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    srv.serve_forever()
+
+
+if __name__ == "__main__":
+    main()

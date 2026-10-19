@@ -214,6 +214,72 @@ def cmd_status(args):
     print("cluster: ", "ready" if backend.ready() else "not running")
 
 
+PF_PID_FILE = "/tmp/cka-exam.pf.pid"
+
+
+def cmd_web(args):
+    import os
+    import subprocess
+
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if not kind_installed() or not backend.ready():
+        ui.warn("cluster not ready. Run:  bash install.sh && ./run.sh up")
+        return
+    if subprocess.run(["bash", "-c", "command -v docker"], capture_output=True).returncode != 0:
+        ui.warn("docker not found")
+        return
+
+    ui.info("[1/4] building image cka-exam:latest ...")
+    cp = subprocess.run(["docker", "build", "-t", "cka-exam:latest", root], capture_output=True, text=True)
+    if cp.returncode != 0:
+        ui.fail(cp.stdout[-2000:] + cp.stderr[-2000:])
+        return
+
+    ui.info("[2/4] loading image into kind ...")
+    cp = subprocess.run(
+        ["kind", "load", "docker-image", "cka-exam:latest", "--name", backend.CLUSTER_NAME],
+        capture_output=True, text=True,
+    )
+    if cp.returncode != 0:
+        ui.fail(cp.stderr)
+        return
+
+    ui.info("[3/4] deploying cka-exam ...")
+    run = subprocess.run(["kubectl", "apply", "-f", os.path.join(root, "k8s", "exam.yaml")],
+                         capture_output=True, text=True)
+    print(run.stdout.strip())
+    subprocess.run(["kubectl", "rollout", "restart", "deploy/cka-exam"], capture_output=True)
+    subprocess.run(["kubectl", "rollout", "status", "deploy/cka-exam", "--timeout=120s"])
+
+    ui.info("[4/4] retrieving NodePort access ...")
+    def _sh(cmd: str) -> str:
+        return subprocess.run(["bash", "-c", cmd], capture_output=True, text=True).stdout.strip()
+    port = _sh("kubectl get svc cka-exam -o jsonpath='{.spec.ports[0].nodePort}'")
+    ips = [l for l in _sh(
+        "kubectl get nodes -o jsonpath="
+        "'{range .items[*]}{.status.addresses[?(@.type==\"InternalIP\")].address}{\"\\n\"}{end}'"
+    ).splitlines() if l]
+
+    ui.banner(f"EXAM WEB UI  |  NodePort {port}")
+    ui.info("Killercoda : open the 'Traffic Port' tab and enter the port above.")
+    for ip in ips:
+        ui.info(f"Local kind : open  http://{ip}:{port}")
+    ui.info("Fallback   : kubectl port-forward svc/cka-exam 8080:80 -> http://localhost:8080")
+    ui.info("The 'Access' tab inside the UI repeats these instructions.")
+
+
+def cmd_webstop(args):
+    import os
+    import subprocess
+
+    subprocess.run(["bash", "-c", "pkill -f 'port-forward svc/cka-exa[m]' || true"], capture_output=True)
+    try:
+        os.remove(PF_PID_FILE)
+    except FileNotFoundError:
+        pass
+    ui.ok("port-forward stopped. The cka-exam service is NodePort and stays reachable on its 30000+ port.")
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog="cka-sim", description="CKA exam simulator (local kind)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -243,6 +309,8 @@ def build_parser():
     sub.add_parser("down", help="delete the kind cluster").set_defaults(func=cmd_down)
     sub.add_parser("reset", help="reset cluster state between questions").set_defaults(func=cmd_reset)
     sub.add_parser("status", help="show cluster/tooling status").set_defaults(func=cmd_status)
+    sub.add_parser("web", help="build+deploy the web exam UI and port-forward it").set_defaults(func=cmd_web)
+    sub.add_parser("webstop", help="stop the web UI port-forward").set_defaults(func=cmd_webstop)
     return p
 
 

@@ -1,0 +1,11 @@
+minutes: 120
+threshold: 66
+scenarios:
+  - create-deploy
+  - expose-nodeport
+  - pvc-mount
+  - role-binding
+  - fix-image-pull
+  - service-no-endpoints
+  - network-policy
+  - extract-image-deploy

@@ -31,6 +31,33 @@ bash install.sh          # installs kind + jq + python deps + creates the cluste
 | `./run.sh up` / `down` / `reset` | Manage the kind cluster |
 | `./run.sh status` | Show tooling/cluster status |
 
+## Web mode (Killercoda-style, NodePort)
+
+```bash
+./run.sh web        # builds image, deploys cka-exam, prints the traffic port
+```
+
+The `cka-exam` Service is a **NodePort (30999, >30000 like Killercoda)**. Four tabs:
+
+| Tab | Content |
+|-----|---------|
+| **Exam** | Questions with hints (levels 1-4 + penalties), built-in terminal (run `kubectl` from the browser), Check button, live score and per-domain report |
+| **Cheatsheet & Hints** | All research methods: `paths(scalars)`, `explain --recursive`, list-vs-single, filters... |
+| **Docs** | kubernetes.io links (allowed during the exam), each opening in a **new tab** |
+| **Access** | The traffic port to enter + how to open it (Killercoda tab / local node IPs / port-forward fallback) |
+
+How to open:
+
+- **Killercoda**: open the *Traffic Port* tab (right of Terminal) and enter `30999`
+- **Local kind**: `http://<node-ip>:30999` (node IPs printed by `./run.sh web`, also shown in the header chip and the Access tab)
+- **Fallback**: `kubectl port-forward svc/cka-exam 8080:80` → http://localhost:8080 (`./run.sh webstop` to stop it)
+
+The exam server runs **in-cluster** (pod `cka-exam`, ServiceAccount with broad
+RBAC — local training cluster only). Web exam = `exams/web-exam.yaml`
+(8 questions; `etcd-backup` stays CLI-only as it needs the host docker socket).
+Re-running `./run.sh web` rebuilds the image and restarts the pod (fresh exam
+state).
+
 ## Inside a scenario
 
 You type **real kubectl commands** (pipes with `jq`/`grep` work), with **tab completion**
