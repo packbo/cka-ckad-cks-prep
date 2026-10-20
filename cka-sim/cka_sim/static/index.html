@@ -77,10 +77,23 @@ button:disabled{cursor:not-allowed;filter:grayscale(0.5)}
         <button class="warn" onclick="askHint(3)">Hint 3</button>
         <button class="ghost" onclick="askHint(4)">Solution</button>
         <button class="ok" onclick="checkQ()">Check</button>
-        <button class="ghost" onclick="skipQ()">Skip</button>
+        <button class="ghost" onclick="skipQ()">Skip ⏭</button>
         <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
         <button class="ghost" onclick="resetQ()">↻ Reset</button>
         <button id="nextbtn" style="display:none;background:#3ecf8e;color:#08121f;font-weight:700;padding:8px 22px;font-size:14px" onclick="nextQ()">Next →</button>
+      </div>
+      <div style="margin-top:12px;padding:8px;background:#141b2b;border:1px solid #28324a;border-radius:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        <span style="color:#8b99b0;font-size:11px;text-transform:uppercase;margin-right:4px">📚 kubernetes.io</span>
+        <a href="https://kubernetes.io/docs/reference/kubectl/cheatsheet/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Cheat Sheet ↗</a>
+        <a href="https://kubernetes.io/docs/reference/kubectl/jsonpath/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">JSONPath ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/workloads/pods/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Pods ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/services-networking/service/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Services ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">NetworkPolicies ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">PV/PVC ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/configuration/configmap/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">ConfigMaps ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/configuration/secret/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Secrets ↗</a>
+        <a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">RBAC ↗</a>
+        <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Deployments ↗</a>
       </div>
     </div>
     <div class="card">
@@ -282,7 +295,19 @@ function nextQ(){
 }
 function skipQ(){
   if(CUR<0)return;
-  api('skip',{index:CUR}).then(function(){refresh();showReport()});
+  api('skip',{index:CUR}).then(function(){
+    $('banner').style.display='block';
+    $('banner').textContent='⏭ Skipped question '+(CUR+1);
+    refresh();showReport();
+    // auto-advance to next question
+    api('state').then(function(s){
+      if(CUR < s.questions.length - 1){
+        setTimeout(function(){loadQ(CUR+1)},500);
+      }else{
+        $('qtext').textContent='🎉 All questions processed. Check the Report below.';
+      }
+    });
+  });
 }
 function tagQ(){
   if(CUR<0)return;
