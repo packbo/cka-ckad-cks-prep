@@ -171,12 +171,17 @@ function refresh(){
 }
 
 // ── Question ──
+// loadQ = select + AUTO-START the setup (namespace, resources are created)
 function loadQ(i){
   CUR=i;
-  api('question',{index:i}).then(function(d){
-    $('qmeta').textContent='Question '+(i+1)+' — domain: '+d.domain+' | weight: '+d.weight+'%';
+  api('start',{index:i}).then(function(d){
+    $('qmeta').textContent='Question '+(i+1)+' — setup applied ✅';
     $('qtext').textContent=d.question;
     $('hints').innerHTML='';
+    refresh();
+  }).catch(function(e){
+    console.error('loadQ error:',e);
+    $('qtext').textContent='Failed to load question. Try clicking it again.';
   });
 }
 function startQ(i){
@@ -257,6 +262,10 @@ function switchCert(cert){
     $('banner').style.display='block';
     $('banner').textContent='Loaded '+cert.toUpperCase()+' — '+d.questions+' questions';
     refresh();showReport();
+    // auto-start question 0
+    if(d.questions>0){
+      loadQ(0);
+    }
   });
 }
 
@@ -275,6 +284,10 @@ function startExam(){
     $('banner').style.display='block';
     $('banner').textContent=MCERT.toUpperCase()+' / '+exam+' — '+d.questions+' questions loaded';
     refresh();showReport();
+    // auto-start question 0 so the namespace/setup is ready
+    if(d.questions>0){
+      loadQ(0);
+    }
   });
 }
 
