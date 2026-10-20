@@ -92,21 +92,54 @@ class ExamState:
         self.advisory = _env.advisory(e)
         self.env = {"nodes": e["nodes"], "workers": len(e["workers"])}
         self.questions = []
+
+        # restore saved state from SQLite
+        from cka_sim import db
+        saved = db.load_questions(self.cert, self.exam_name)
+        sess = db.load_session()
+        if sess.get("elapsed") and not self.started_at:
+            self.started_at = time.time() - int(sess["elapsed"])
+        if sess.get("started_at") and not self.started_at:
+            self.started_at = sess["started_at"]
+
         for sid in exam.get("scenarios", []):
             s = by_id.get(sid)
             if s is None:
                 continue
             if _env.unmet_requires(s.requires, e):
-                continue  # does not fit this environment (no docker in pod, single-node, ...)
+                continue
+            # restore per-question state
+            prev = saved.get(sid, {})
             self.questions.append({
                 "scenario": s,
-                "status": "pending",
-                "score": 0.0,
-                "hints_used": 0,
+                "status": prev.get("status", "pending"),
+                "score": prev.get("score", 0.0),
+                "hints_used": prev.get("hints_used", 0),
             })
+
+        # persist session metadata
+        db.save_session(
+            cert=self.cert,
+            exam=self.exam_name,
+            elapsed=self.elapsed(),
+            started_at=self.started_at,
+        )
 
     def elapsed(self) -> int:
         return int(time.time() - self.started_at) if self.started_at else 0
+
+    def persist(self):
+        """Save all question states + session metadata to SQLite."""
+        from cka_sim import db
+        for q in self.questions:
+            db.save_question(
+                self.cert, self.exam_name,
+                q["scenario"].id, q["status"], q["score"], q["hints_used"],
+            )
+        db.save_session(
+            cert=self.cert, exam=self.exam_name,
+            elapsed=self.elapsed(), started_at=self.started_at,
+        )
 
     def public(self) -> dict:
         with self.lock:
@@ -716,6 +749,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(access_info())
         elif self.path == "/api/exams":
             self._json({"exams": available_exams()})
+        elif self.path == "/api/db/download":
+            self._db_download()
+        elif self.path == "/api/db/info":
+            self._db_info()
         else:
             self._json({"error": "not found"}, 404)
 
@@ -746,6 +783,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_reset(data)
             if p == "cert":
                 return self._api_cert(data)
+            if p == "db/reset":
+                return self._api_db_reset(data)
+            if p == "db/upload":
+                return self._api_db_upload(data)
             if p == "complete":
                 return self._json(complete_command(str(data.get("input", ""))))
         self._json({"error": "unknown endpoint"}, 404)
@@ -802,6 +843,7 @@ class Handler(BaseHTTPRequestHandler):
             lvl_n = 4 if isinstance(lvl, str) else int(lvl)
             if lvl_n == level:
                 q["hints_used"] = max(q["hints_used"], level)
+                STATE.persist()
                 from cka_sim import env as _env
                 return self._json({"text": _env.substitute(h.get("text", "")), "penalty": PENALTY.get(level, 0)})
         return self._json({"text": "no hint at this level", "penalty": 0})
@@ -819,6 +861,7 @@ class Handler(BaseHTTPRequestHandler):
             results.append({"passed": r.passed, "detail": r.detail})
         passed = bool(results) and all(r["passed"] for r in results)
         if passed and q["status"] != "solved":
+            STATE.persist()  # save to SQLite
             pen = PENALTY.get(q["hints_used"], 0.0) if q["hints_used"] < 4 else 1.0
             q["score"] = round(max(0.0, s.weight * (1.0 - pen)), 2)
             q["status"] = "solved"
@@ -835,6 +878,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "bad index"}, 400)
         if q["status"] != "solved":
             q["status"] = "skipped"
+        STATE.persist()
         return self._json({"ok": True})
 
     def _api_tag(self, data):
@@ -866,11 +910,59 @@ class Handler(BaseHTTPRequestHandler):
         exam_name = str(data.get("exam", "web-exam.yaml")).strip()
         if cert not in ("cka", "ckad", "cks"):
             return self._json({"error": "unknown cert"}, 400)
-        # NOTE: no STATE.lock here — already held by do_POST caller
         STATE.load(cert=cert, exam_name=exam_name)
         STATE.started_at = None
+        STATE.persist()
         return self._json({"ok": True, "cert": cert, "exam": exam_name,
                            "questions": len(STATE.questions)})
+
+    def _api_db_reset(self, data):
+        from cka_sim import db
+        db.reset_all()
+        STATE.started_at = None
+        STATE.load()
+        return self._json({"ok": True, "message": "Session reset — all results cleared"})
+
+    def _api_db_upload(self, data):
+        import base64
+        import tempfile
+        from cka_sim import db
+        b64 = data.get("data", "")
+        if not b64:
+            return self._json({"error": "no data provided"}, 400)
+        try:
+            raw = base64.b64decode(b64)
+            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+                tmp.write(raw)
+                tmp_path = tmp.name
+            db.import_db(tmp_path)
+            os.unlink(tmp_path)
+            STATE.load()
+            return self._json({"ok": True, "message": "Database imported",
+                               "questions": len(STATE.questions)})
+        except Exception as e:
+            return self._json({"error": str(e)}, 400)
+
+    def _db_download(self):
+        import base64
+        from cka_sim import db
+        db_path = db.export_db()
+        if not os.path.exists(db_path):
+            return self._json({"error": "no database yet"}, 404)
+        with open(db_path, "rb") as f:
+            raw = f.read()
+        b64 = base64.b64encode(raw).decode()
+        self._json({"filename": "exam_state.db", "size": len(raw), "data": b64})
+
+    def _db_info(self):
+        from cka_sim import db
+        db_path = db.export_db()
+        if not os.path.exists(db_path):
+            return self._json({"exists": False})
+        size = os.path.getsize(db_path)
+        sess = db.load_session()
+        return self._json({"exists": True, "size": size, "path": db_path,
+                           "session": {k: v for k, v in sess.items() if k != "started_at"}})
 
 
 def main():

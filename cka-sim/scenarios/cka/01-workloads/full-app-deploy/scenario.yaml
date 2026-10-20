@@ -1,0 +1,44 @@
+id: full-app-deploy
+title: "Deploy a complete app in under 3 minutes"
+domain: workloads
+weight: 6
+difficulty: hard
+time_estimate: 180
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `challenge`, deploy a complete application:
+
+  1. Secret `db-pass` with key `password`=`s3cr3t`
+  2. ConfigMap `app-config` with key `LOG_LEVEL`=`debug`
+  3. Deployment `api` (2 replicas, image `nginx:1.21`) with:
+     - env var `PASSWORD` from the Secret
+     - env var `LOG_LEVEL` from the ConfigMap
+  4. Service `api` (ClusterIP, port 80)
+
+  This tests your SPEED — the real exam expects ~2 min per task.
+hints:
+  - level: 1
+    text: "Four objects. Use one-shot generators for Secret/ConfigMap, $do for the rest."
+  - level: 2
+    text: "kubectl create secret generic db-pass --from-literal=password=s3cr3t -n challenge && kubectl create configmap app-config --from-literal=LOG_LEVEL=debug -n challenge"
+  - level: 3
+    text: "For the Deployment env vars: env[].valueFrom.secretKeyRef and env[].valueFrom.configMapKeyRef. Generate with $do then edit."
+  - level: solution
+    text: |
+      k create secret generic db-pass --from-literal=password=s3cr3t -n challenge
+      k create configmap app-config --from-literal=LOG_LEVEL=debug -n challenge
+      k create deploy api --image=nginx:1.21 --replicas=2 -n challenge $do > api.yaml
+      # edit: add envFrom/valueFrom
+      k apply -f api.yaml
+      k expose deploy api --port=80 -n challenge
+check:
+  assertions:
+    - run: "kubectl get secret db-pass -n challenge -o jsonpath='{.data.password}' | base64 -d"
+      equals: "s3cr3t"
+    - run: "kubectl get configmap app-config -n challenge -o jsonpath='{.data.LOG_LEVEL}'"
+      equals: "debug"
+    - run: "kubectl get deploy api -n challenge -o jsonpath='{.status.availableReplicas}'"
+      equals: "2"
+    - run: "kubectl get svc api -n challenge -o jsonpath='{.spec.ports[0].port}'"
+      equals: "80"

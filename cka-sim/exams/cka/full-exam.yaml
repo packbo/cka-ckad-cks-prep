@@ -35,3 +35,7 @@ scenarios:
   - hpa-autoscale
   - resource-quota
   - image-pull-secret
+  - dns-troubleshoot
+  - cert-renew
+  - full-app-deploy
+  - crd-install

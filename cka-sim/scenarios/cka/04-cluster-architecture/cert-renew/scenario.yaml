@@ -1,0 +1,29 @@
+id: cert-renew
+title: "Check and renew expiring cluster certificates"
+domain: cluster-architecture
+weight: 4
+difficulty: hard
+time_estimate: 360
+requires: {node_exec: true}
+setup:
+  apply: setup.yaml
+question: |
+  1. Check the expiration dates of ALL certificates in /etc/kubernetes/pki
+     on the control-plane node.
+  2. Renew any certificate that expires within 1 year.
+hints:
+  - level: 1
+    text: "kubeadm manages these certs. Check: %NODEEXEC% kubeadm certs check-expiration"
+  - level: 2
+    text: "Renew ALL: %NODEEXEC% kubeadm certs renew all  (then restart static pods to pick up new certs)"
+  - level: 3
+    text: "After renewal, restart the control-plane static pods so they load the new certs: %NODEEXEC% mv /etc/kubernetes/manifests/*.yaml /root/ && sleep 5 && %NODEEXEC% mv /root/*.yaml /etc/kubernetes/manifests/"
+  - level: solution
+    text: |
+      %NODEEXEC% kubeadm certs check-expiration
+      %NODEEXEC% kubeadm certs renew all
+      %NODEEXEC% kubeadm certs check-expiration    # verify new dates
+check:
+  assertions:
+    - run: "%NODEEXEC% kubeadm certs check-expiration 2>&1 | grep -c 'INVALID'"
+      equals: "0"

@@ -110,6 +110,14 @@ button:disabled{cursor:not-allowed;filter:grayscale(0.5)}
       <h3>Report</h3>
       <div id="report" style="color:#8b99b0">Start the exam to see results.</div>
     </div>
+    <div class="card">
+      <h3>Session Data (SQLite)</h3>
+      <div id="dbinfo" style="color:#8b99b0;font-size:13px;margin-bottom:10px">Loading...</div>
+      <button class="ok" onclick="downloadDB()">⬇ Download DB</button>
+      <button class="ghost" onclick="document.getElementById('dbfile').click()">⬆ Import DB</button>
+      <button class="ghost" style="color:#ff6b6b" onclick="resetSession()">🗑 Reset Session</button>
+      <input type="file" id="dbfile" accept=".db" style="display:none" onchange="uploadDB(this)">
+    </div>
   </div>
 
   <div id="p-cheat" class="page" style="display:none">
@@ -412,8 +420,52 @@ function loadDocs(){
   $('doclist').innerHTML=html;
 }
 
+// ── Session DB ──
+function loadDBInfo(){
+  api('db/info').then(function(d){
+    if(d.exists){
+      $('dbinfo').textContent='💾 '+Math.round(d.size/1024)+'KB — cert='+d.session.cert+' — exam='+d.session.exam;
+    }else{
+      $('dbinfo').textContent='💾 No saved session yet';
+    }
+  });
+}
+function downloadDB(){
+  fetch('/api/db/download').then(function(r){return r.json()}).then(function(d){
+    if(d.error){alert('No database to download');return}
+    var blob=new Blob([atob(d.data)],{type:'application/octet-stream'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=d.filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
+}
+function uploadDB(input){
+  var file=input.files[0];if(!file)return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    var b64=btoa(new Uint8Array(reader.result).reduce(function(d,b){d.push(String.fromCharCode(b));return d},[]).join(''));
+    api('db/upload',{data:b64}).then(function(d){
+      if(d.ok){
+        alert('✅ Database imported — '+d.questions+' questions restored');
+        refresh();showReport();loadDBInfo();
+      }else{alert('Import failed: '+d.error)}
+    });
+  };
+  reader.readAsArrayBuffer(file);
+}
+function resetSession(){
+  if(!confirm('Reset ALL results and session data? This cannot be undone.'))return;
+  api('db/reset',{}).then(function(d){
+    alert('✅ '+d.message);
+    refresh();showReport();loadDBInfo();
+    $('qtext').textContent='Session reset. Select a question to start.';
+  });
+}
+
 // ── Init ──
-refresh();loadCheats();loadDocs();
+refresh();loadCheats();loadDocs();loadDBInfo();
 </script>
 </body>
 </html>

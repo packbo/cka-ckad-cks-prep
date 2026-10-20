@@ -1,0 +1,49 @@
+id: topology-spread
+title: "Pod topology spread constraints"
+domain: workloads
+weight: 4
+difficulty: hard
+time_estimate: 300
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `spread`: label both worker nodes `zone=zone-a` and `zone=zone-b`
+  respectively, then create deployment `web` (image `nginx:1.21`, 4 replicas)
+  that spreads pods evenly across both zones using topology spread constraints
+  (maxSkew: 1, topologyKey: zone).
+hints:
+  - level: 1
+    text: "Two steps: label the nodes, then write a Deployment with spec.template.spec.topologySpreadConstraints."
+  - level: 2
+    text: "Label nodes: kubectl label node %WORKER% zone=zone-a && kubectl label node %WORKER2% zone=zone-b"
+  - level: 3
+    text: "topologySpreadConstraints: [{maxSkew: 1, topologyKey: zone, whenUnsatisfiable: DoNotSchedule, labelSelector: {matchLabels: {app: web}}}]"
+  - level: solution
+    text: |
+      kubectl label node %WORKER% zone=zone-a
+      kubectl label node %WORKER2% zone=zone-b
+      kubectl apply -f - <<EOF
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: { name: web, namespace: spread }
+      spec:
+        replicas: 4
+        selector: { matchLabels: { app: web } }
+        template:
+          metadata: { labels: { app: web } }
+          spec:
+            topologySpreadConstraints:
+            - maxSkew: 1
+              topologyKey: zone
+              whenUnsatisfiable: DoNotSchedule
+              labelSelector:
+                matchLabels: { app: web }
+            containers:
+            - { name: nginx, image: nginx:1.21 }
+      EOF
+check:
+  assertions:
+    - run: "kubectl get deploy web -n spread -o json | jq '[.spec.template.spec.topologySpreadConstraints[0].maxSkew]'"
+      contains: "1"
+    - run: "kubectl get deploy web -n spread -o jsonpath='{.status.readyReplicas}'"
+      equals: "4"

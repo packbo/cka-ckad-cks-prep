@@ -1,0 +1,38 @@
+id: crd-install
+title: "Install a CRD and create a custom resource"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  Install this CustomResourceDefinition, then create a custom resource
+  of type `Database` named `my-db` in namespace `crd` with spec:
+  `engine: postgres`, `version: "15"`.
+
+  CRD manifest is at: `scenarios/cka/01-workloads/crd-install/crd.yaml`
+hints:
+  - level: 1
+    text: "Two steps: kubectl apply the CRD, then create a resource of that new type."
+  - level: 2
+    text: "kubectl apply -f scenarios/cka/01-workloads/crd-install/crd.yaml ; then write a YAML with apiVersion: stable.example.com/v1, kind: Database."
+  - level: 3
+    text: "The CRD defines spec.versions[].schema.openAPIV3Schema — check what fields are expected: kubectl get crd databases.stable.example.com -o yaml | grep -A20 schema"
+  - level: solution
+    text: |
+      kubectl apply -f scenarios/cka/01-workloads/crd-install/crd.yaml
+      kubectl apply -f - <<EOF
+      apiVersion: stable.example.com/v1
+      kind: Database
+      metadata: { name: my-db, namespace: crd }
+      spec:
+        engine: postgres
+        version: "15"
+      EOF
+check:
+  assertions:
+    - run: "kubectl get crd databases.stable.example.com -o jsonpath='{.spec.group}'"
+      equals: "stable.example.com"
+    - run: "kubectl get database my-db -n crd -o jsonpath='{.spec.engine}'"
+      equals: "postgres"

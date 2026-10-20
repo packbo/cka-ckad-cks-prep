@@ -1,0 +1,33 @@
+id: dns-troubleshoot
+title: "CoreDNS is down — fix cluster DNS"
+domain: troubleshooting
+weight: 5
+difficulty: hard
+time_estimate: 300
+setup:
+  apply: setup.yaml
+  script:
+    - "kubectl -n kube-system scale deploy coredns --replicas=0"
+question: |
+  Cluster DNS is broken — no Service name resolves (nslookup fails from any
+  pod). Diagnose and repair DNS so `nslookup kubernetes.default` works again
+  from a test pod.
+hints:
+  - level: 1
+    text: "DNS in Kubernetes = CoreDNS (deployment in kube-system). Check: kubectl -n kube-system get pods -l k8s-app=kube-dns"
+  - level: 2
+    text: "The CoreDNS deployment has been scaled to 0. Scale it back: kubectl -n kube-system scale deploy coredns --replicas=2"
+  - level: 3
+    text: "Test with a busybox pod: kubectl run dnstest --image=busybox:1.36 --rm -it --restart=Never -- nslookup kubernetes.default"
+  - level: solution
+    text: |
+      kubectl -n kube-system get deploy coredns           # shows 0 replicas
+      kubectl -n kube-system scale deploy coredns --replicas=2
+      kubectl -n kube-system rollout status deploy/coredns --timeout=60s
+      kubectl run dnstest --image=busybox:1.36 --rm -it --restart=Never -- nslookup kubernetes.default
+check:
+  assertions:
+    - run: "kubectl -n kube-system get deploy coredns -o jsonpath='{.status.readyReplicas}'"
+      equals: "2"
+    - run: "kubectl -n kube-system get endpoints kube-dns -o jsonpath='{.subsets[0].addresses[0].ip}'"
+      contains: "."
