@@ -37,6 +37,9 @@ th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
 #modal h2{color:#4da3ff;margin-bottom:20px}
 #banner{display:none;background:#1a2233;border:1px solid #4da3ff;border-radius:6px;padding:10px;margin-bottom:12px;font-size:14px}
 .docs a{color:#4da3ff;text-decoration:none;font-size:15px;display:block;padding:6px 0}
+button:disabled{cursor:not-allowed;filter:grayscale(0.5)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.preparing{animation:pulse 1.5s ease-in-out infinite}
 .cheat{border-left:3px solid #4da3ff;padding:8px 12px;margin:8px 0;background:#141b2b;font-size:13px}
 .cheat code{display:block;background:#0b101c;padding:6px 8px;margin:4px 0;font-size:12px}
 </style>
@@ -68,7 +71,7 @@ th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
       <div class="qtext" id="qtext">Select a question from the list below.</div>
       <div id="hints"></div>
       <div style="margin-top:10px">
-        <button class="ok" onclick="startQ(CUR)">Start</button>
+        <button class="ok" id="pausebtn" onclick="togglePause()">⏸ Pause</button>
         <button class="warn" onclick="askHint(1)">Hint 1</button>
         <button class="warn" onclick="askHint(2)">Hint 2</button>
         <button class="warn" onclick="askHint(3)">Hint 3</button>
@@ -77,6 +80,7 @@ th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
         <button class="ghost" onclick="skipQ()">Skip</button>
         <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
         <button class="ghost" onclick="resetQ()">↻ Reset</button>
+        <button id="nextbtn" style="display:none;background:#3ecf8e;color:#08121f;font-weight:700;padding:8px 22px;font-size:14px" onclick="nextQ()">Next →</button>
       </div>
     </div>
     <div class="card">
@@ -125,7 +129,7 @@ th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
 </div>
 
 <script>
-var CUR=-1, MCERT='cka', EXAM_MIN=0, ELAPSED=0;
+var CUR=-1, MCERT='cka', EXAM_MIN=0, ELAPSED=0, PAUSED=false;
 function $(id){return document.getElementById(id)}
 
 // ── Tabs ──
@@ -144,13 +148,36 @@ function api(path,body){
   return fetch('/api/'+path,opts).then(function(r){return r.json()});
 }
 
-// ── Timer ──
+// ── Timer (respects PAUSED) ──
 setInterval(function(){
-  if(!EXAM_MIN)return;
+  if(!EXAM_MIN || PAUSED)return;
   var left=Math.max(0,EXAM_MIN*60-ELAPSED);ELAPSED++;
   var m=Math.floor(left/60),s=left%60;
   $('timer').textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
 },1000);
+
+// ── Pause/Resume ──
+function togglePause(){
+  PAUSED=!PAUSED;
+  var btn=$('pausebtn');
+  var tmr=$('timer');
+  if(PAUSED){
+    btn.textContent='▶ Resume';
+    btn.style.background='#ff9f43';
+    btn.style.color='#1a1a2e';
+    tmr.style.color='#ff9f43';
+    tmr.textContent='⏸ '+tmr.textContent;
+    $('banner').style.display='block';
+    $('banner').textContent='⏸ PAUSED — click ▶ Resume to continue';
+  }else{
+    btn.textContent='⏸ Pause';
+    btn.style.background='';
+    btn.style.color='';
+    tmr.style.color='';
+    tmr.textContent=tmr.textContent.replace('⏸ ','');
+    $('banner').style.display='none';
+  }
+}
 
 // ── State ──
 function refresh(){
@@ -171,25 +198,40 @@ function refresh(){
 }
 
 // ── Question ──
-// loadQ = select + AUTO-START the setup (namespace, resources are created)
+// loadQ = select → show "Preparing..." while setup runs → reveal question
 function loadQ(i){
   CUR=i;
+  $('nextbtn').style.display='none';
+  // show loading state
+  $('qmeta').textContent='Question '+(i+1)+' — preparing environment...';
+  $('qtext').style.opacity='0.5';
+  $('qtext').classList.add('preparing');
+  $('qtext').textContent='⏳ Preparing environment (applying setup, creating namespaces and resources)...';
+  $('hints').innerHTML='';
+  // disable action buttons during setup
+  setButtons(false);
   api('start',{index:i}).then(function(d){
-    $('qmeta').textContent='Question '+(i+1)+' — setup applied ✅';
+    // setup done: reveal question
+    $('qmeta').textContent='Question '+(i+1)+' — ready ✅';
+    $('qtext').style.opacity='1';
+    $('qtext').classList.remove('preparing');
     $('qtext').textContent=d.question;
-    $('hints').innerHTML='';
+    setButtons(true);
     refresh();
   }).catch(function(e){
     console.error('loadQ error:',e);
-    $('qtext').textContent='Failed to load question. Try clicking it again.';
+    $('qtext').style.opacity='1';
+    $('qtext').classList.remove('preparing');
+    $('qtext').textContent='⚠ Failed to prepare question. Click it again.';
+    setButtons(true);
   });
 }
-function startQ(i){
-  if(i<0)return;
-  api('start',{index:i}).then(function(d){
-    $('qtext').textContent=d.question;
-    $('hints').innerHTML='';
-    refresh();
+function setButtons(enabled){
+  var ids=['pausebtn','tagbtn'];
+  document.querySelectorAll('#p-exam button').forEach(function(b){
+    if(b.id==='nextbtn')return; // next is managed separately
+    b.disabled=!enabled;
+    b.style.opacity=enabled?'1':'0.4';
   });
 }
 function askHint(level){
@@ -210,9 +252,33 @@ function checkQ(){
     });
     html+='<div><b>'+(d.passed?'SOLVED':'Not yet')+'</b> — score '+d.score+'/'+d.weight+'</div>';
     $('hints').innerHTML+=('<div class="hintbox">'+html+'</div>');
-    if(d.passed){$('banner').style.display='block';$('banner').innerHTML='✅ SOLVED — '+d.score+'/'+d.weight+' points';}
+    if(d.passed){
+      $('banner').style.display='block';
+      $('banner').innerHTML='✅ SOLVED — '+d.score+'/'+d.weight+' points';
+      // show Next button (if not the last question)
+      api('state').then(function(s){
+        if(CUR < s.questions.length - 1){
+          $('nextbtn').style.display='inline-block';
+        }else{
+          $('nextbtn').style.display='none';
+          $('banner').innerHTML+=' — 🎉 LAST QUESTION! View the Report below.';
+        }
+      });
+    }else{
+      $('nextbtn').style.display='none';
+    }
     refresh();showReport();
   });
+}
+function nextQ(){
+  $('nextbtn').style.display='none';
+  if(CUR>=0){
+    api('state').then(function(s){
+      if(CUR < s.questions.length - 1){
+        loadQ(CUR+1);
+      }
+    });
+  }
 }
 function skipQ(){
   if(CUR<0)return;
