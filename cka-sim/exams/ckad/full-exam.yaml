@@ -1,24 +1,32 @@
 minutes: 120
 threshold: 66
 scenarios:
-  - first-pod
-  - create-deploy
-  - extract-image-deploy
-  - rollout-rollback
-  - blue-green-deploy
-  - canary-deploy
-  - job-completions
-  - sidecar-logging
-  - init-container
-  - probe-readiness
-  - secret-volume
-  - env-configmap
-  - expose-nodeport
-  - ingress-path
-  - network-policy
-  - pvc-mount
-  - fix-image-pull
-  - service-no-endpoints
-  - statefulset-create
-  - image-pull-secret
-  - topology-spread
+- first-pod
+- create-deploy
+- extract-image-deploy
+- rollout-rollback
+- blue-green-deploy
+- canary-deploy
+- job-completions
+- sidecar-logging
+- init-container
+- probe-readiness
+- secret-volume
+- env-configmap
+- expose-nodeport
+- ingress-path
+- network-policy
+- pvc-mount
+- fix-image-pull
+- service-no-endpoints
+- statefulset-create
+- image-pull-secret
+- topology-spread
+- adapter-pattern
+- init-ordering
+- startup-probe
+- liveness-exec
+- metrics-sidecar
+- labels-selector-match
+- immutable-configmap
+- job-retry-backoff

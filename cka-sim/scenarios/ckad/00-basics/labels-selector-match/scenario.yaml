@@ -1,0 +1,33 @@
+id: labels-selector-match
+title: "Labels & selectors: wire a Service to Pods"
+domain: basics
+weight: 3
+difficulty: medium
+time_estimate: 210
+setup:
+  apply: setup.yaml
+question: |
+  A Deployment `api` (2 replicas, image nginx:1.25) already runs in
+  namespace `ckad-ll`, its Pods carry labels `app=api` and `tier=backend`.
+
+  Create a Service `api-svc` in `ckad-ll` that:
+
+  - selects ONLY the pods with labels `app=api` AND `tier=backend`
+  - exposes port **80** on targetPort **80**
+
+  The Service must actually route to the 2 pods (check the endpoints).
+hints:
+  - level: 1
+    text: "A Service routes to pods whose LABELS match its selector — kubectl explain svc.spec.selector"
+  - level: 2
+    text: "kubectl expose deploy api -n ckad-ll --port=80 --target-port=80 $do > svc.yaml gives a head start — then check the selector matches BOTH labels. Verify wiring: kubectl get endpoints api-svc -n ckad-ll"
+  - level: 3
+    text: "Pitfall: kubectl expose copies only ONE label from the deployment. The selector here must contain app AND tier. Compare: kubectl get svc api-svc -n ckad-ll -o jsonpath='{.spec.selector}'"
+check:
+  assertions:
+    - run: "kubectl get svc api-svc -n ckad-ll -o jsonpath='{.spec.selector.app}'"
+      equals: "api"
+    - run: "kubectl get svc api-svc -n ckad-ll -o jsonpath='{.spec.selector.tier}'"
+      equals: "backend"
+    - run: "kubectl get endpoints api-svc -n ckad-ll -o json | jq '[.subsets[]?.addresses[]?] | length'"
+      contains: "2"

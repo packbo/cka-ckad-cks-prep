@@ -1,15 +1,17 @@
 minutes: 120
 threshold: 66
 scenarios:
+  # CKAD-flavoured exam: multi-container patterns, probes, labels/selectors,
+  # immutability, jobs — only 2 questions shared with the CKA web-exam.
   - create-deploy
-  - expose-nodeport
+  - liveness-exec
+  - adapter-pattern
+  - labels-selector-match
+  - startup-probe
   - pvc-mount
+  - immutable-configmap
+  - job-retry-backoff
+  - metrics-sidecar
+  - init-ordering
+  - topology-spread
   - sidecar-logging
-  - probe-readiness
-  - env-configmap
-  - secret-volume
-  - fix-image-pull
-  - service-no-endpoints
-  - network-policy
-  - canary-deploy
-  - blue-green-deploy

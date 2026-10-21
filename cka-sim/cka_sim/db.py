@@ -90,7 +90,71 @@ def export_db():
     return DB_PATH
 
 
-def import_db(source_path):
+SQLITE_MAGIC = b"SQLite format 3\x00"
+
+
+def _is_valid_sqlite(path: str) -> bool:
+    """Quick sanity check: openable + readable schema."""
+    import sqlite3
+    try:
+        c = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        c.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        c.close()
+        return True
+    except Exception:
+        return False
+
+
+def _try_repair_utf8_mangled(path: str) -> bool:
+    """Repair a DB corrupted by the OLD download button.
+
+    The old UI built the download Blob from a binary STRING -> the browser
+    UTF-8-encoded it, so every byte >= 0x80 became 2 bytes. That transform is
+    exactly reversible: utf-8 decode -> latin-1 encode gives back the bytes.
+    Returns True if a repaired copy at <path> now passes the SQLite check.
+    """
+    try:
+        raw = open(path, "rb").read()
+        repaired = raw.decode("utf-8").encode("latin-1")
+        if not repaired.startswith(SQLITE_MAGIC):
+            return False
+        tmp = path + ".repaired"
+        with open(tmp, "wb") as fh:
+            fh.write(repaired)
+        if _is_valid_sqlite(tmp):
+            os.replace(tmp, path)
+            return True
+        os.unlink(tmp)
+        return False
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        return False
+
+
+def import_db(source_path: str):
+    """Validate then swap the active DB (with .bak backup of the current one).
+
+    Raises ValueError with a human-readable message on invalid files.
+    Auto-repairs files corrupted by the old UTF-8-mangling download button.
+    """
     import shutil
     with _lock:
+        if not os.path.exists(source_path) or os.path.getsize(source_path) == 0:
+            raise ValueError("file is empty or missing")
+        # 1) already valid?  2) else: try auto-repair (old download button
+        # UTF-8 corruption) — the ASCII magic header survives mangling, so the
+        # repair must be attempted whenever VALIDATION fails, not just when
+        # the header differs.
+        if not _is_valid_sqlite(source_path):
+            if not _try_repair_utf8_mangled(source_path):
+                raise ValueError(
+                    "not a valid SQLite database "
+                    "(database disk image is malformed). If this file was "
+                    "downloaded with an OLD version of the web UI, it was "
+                    "corrupted at download time and cannot always be "
+                    "recovered — export a fresh one after updating."
+                )
+        if not _is_valid_sqlite(source_path):
+            raise ValueError("database disk image is malformed (failing integrity read)")
+        if os.path.exists(DB_PATH):
+            shutil.copy2(DB_PATH, DB_PATH + ".bak")  # safety net
         shutil.copy2(source_path, DB_PATH)

@@ -457,14 +457,20 @@ function switchCert(cert){
   });
 }
 
-function switchExam(name){
-  if(!name)return;
-  var cert=$('cert-cka').classList.contains('active')?'cka':
-    $('cert-ckad').classList.contains('active')?'ckad':'cks';
-  api('cert',{cert:cert,exam:name}).then(function(d){
+function switchExam(v){
+  if(!v)return;
+  var parts=v.split('/'), cert=parts[0], exam=parts[1];
+  // selecting an exam of another cert also switches the active cert
+  document.querySelectorAll('header .certbtn').forEach(function(b){b.classList.remove('active')});
+  $('cert-'+cert).classList.add('active');
+  api('cert',{cert:cert,exam:exam}).then(function(d){
     $('banner').style.display='block';
-    $('banner').textContent='Loaded '+cert.toUpperCase()+' / '+name+' — '+d.questions+' questions';
+    $('banner').textContent='Loaded '+cert.toUpperCase()+' / '+exam+' — '+d.questions+' questions';
     refresh();showReport();
+    if(d.questions>0){loadQ(0);}
+  }).catch(function(){
+    $('banner').style.display='block';
+    $('banner').textContent='⚠ Failed to load '+v;
   });
 }
 
@@ -474,7 +480,8 @@ function loadExams(){
     sel.innerHTML='<option value="">— exam —</option>';
     (d.exams||[]).forEach(function(e){
       var o=document.createElement('option');
-      o.value=e.name;o.textContent=e.cert+'/'+e.name;
+      o.value=e.cert+'/'+e.name+'.yaml';   // full id: cert + filename WITH .yaml
+      o.textContent=e.cert+'/'+e.name;
       sel.appendChild(o);
     });
   });
@@ -618,7 +625,11 @@ function loadDBInfo(){
 function downloadDB(){
   fetch('/api/db/download').then(function(r){return r.json()}).then(function(d){
     if(d.error){alert('No database to download');return}
-    var blob=new Blob([atob(d.data)],{type:'application/octet-stream'});
+    // binary-safe: atob -> byte array -> Blob (NEVER pass the string itself,
+    // the browser would UTF-8-encode it and corrupt bytes >= 0x80)
+    var bin=atob(d.data), bytes=new Uint8Array(bin.length);
+    for(var i=0;i<bin.length;i++){bytes[i]=bin.charCodeAt(i);}
+    var blob=new Blob([bytes],{type:'application/octet-stream'});
     var a=document.createElement('a');
     a.href=URL.createObjectURL(blob);a.download=d.filename;a.click();
     URL.revokeObjectURL(a.href);
@@ -626,16 +637,17 @@ function downloadDB(){
 }
 function uploadDB(input){
   var file=input.files[0];if(!file)return;
-  var reader=new FileReader();
-  reader.onload=function(){
-    var b64=btoa(new Uint8Array(reader.result).reduce(function(d,b){d.push(String.fromCharCode(b));return d},[]).join(''));
-    api('db/upload',{data:b64}).then(function(d){
-      if(d.ok){alert('✅ Database imported — '+d.questions+' questions restored');
-        refresh();showReport();loadDBInfo();}
-      else{alert('Import failed: '+d.error)}
+  // raw binary upload (no base64, no string round-trip)
+  file.arrayBuffer().then(function(buf){
+    fetch('/api/db/upload-raw',{method:'POST',
+      headers:{'Content-Type':'application/octet-stream'},body:buf})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.ok){alert('✅ '+d.message+' — '+d.questions+' questions restored');
+        refresh();showReport();loadDBInfo();loadAI();}
+      else{alert('Import failed: '+(d.error||'unknown'))}
     });
-  };
-  reader.readAsArrayBuffer(file);
+  });
 }
 function resetSession(){
   if(!confirm('Reset ALL results and session data? This cannot be undone.'))return;

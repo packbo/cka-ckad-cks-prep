@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ckad-ll
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: ckad-ll
+  labels: {app: api, tier: backend}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: api}}
+  template:
+    metadata:
+      labels: {app: api, tier: backend}
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.25
+        ports: [{containerPort: 80}]

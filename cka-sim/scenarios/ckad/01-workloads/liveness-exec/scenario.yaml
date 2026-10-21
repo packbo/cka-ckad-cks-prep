@@ -1,0 +1,31 @@
+id: liveness-exec
+title: "Liveness probe: exec command"
+domain: workloads
+weight: 2
+difficulty: easy
+time_estimate: 180
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create a Pod named `healthcheck` (image `busybox:1.36`,
+  command `sh -c "touch /tmp/healthy; sleep 3600"`) with a `livenessProbe`
+  using an EXEC command:
+
+  `cat /tmp/healthy`  with `initialDelaySeconds: 5` and `periodSeconds: 10`
+
+  If the file disappears, Kubernetes must restart the container.
+hints:
+  - level: 1
+    text: "Not all probes are HTTP: kubectl explain pod.spec.containers.livenessProbe.exec"
+  - level: 2
+    text: "kubectl run healthcheck -n ckad --image=busybox:1.36 --command -- sh -c 'touch /tmp/healthy; sleep 3600' $do > pod.yaml, then add livenessProbe.exec.command (list of strings)."
+  - level: 3
+    text: "Pitfall: exec.command is a LIST (['cat','/tmp/healthy']), not a single string — and it must exit 0 to be 'healthy'."
+check:
+  assertions:
+    - run: "kubectl get pod healthcheck -n ckad -o jsonpath='{.spec.containers[0].livenessProbe.exec.command[*]}'"
+      contains: "cat"
+    - run: "kubectl get pod healthcheck -n ckad -o jsonpath='{.spec.containers[0].livenessProbe.exec.command[1]}'"
+      equals: "/tmp/healthy"
+    - run: "kubectl get pod healthcheck -n ckad -o jsonpath='{.spec.containers[0].livenessProbe.initialDelaySeconds}'"
+      equals: "5"

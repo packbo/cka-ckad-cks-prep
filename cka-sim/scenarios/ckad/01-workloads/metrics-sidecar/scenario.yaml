@@ -1,0 +1,32 @@
+id: metrics-sidecar
+title: "Sidecar exposing a metrics port"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create a Deployment `api` (image `nginx:1.25`,
+  2 replicas) where each Pod ALSO runs a sidecar container:
+
+  - name `metrics-exporter`, image `prom/statsd-exporter:latest`
+  - exposing containerPort **9090** with name **metrics**
+
+hints:
+  - level: 1
+    text: "Deployment pod template can hold several containers — kubectl explain deploy.spec.template.spec.containers"
+  - level: 2
+    text: "kubectl create deploy api -n ckad --image=nginx:1.25 --replicas=2 $do > d.yaml, then add the second container with ports: [{containerPort: 9090, name: metrics}]."
+  - level: 3
+    text: "Pitfall: named ports live on the CONTAINER (containers[1].ports), not on the Service or the Deployment — apply and verify with kubectl get deploy api -n ckad -o yaml."
+check:
+  assertions:
+    - run: "kubectl get deploy api -n ckad -o jsonpath='{.spec.template.spec.containers[1].name}'"
+      equals: "metrics-exporter"
+    - run: "kubectl get deploy api -n ckad -o jsonpath='{.spec.template.spec.containers[1].ports[0].containerPort}'"
+      equals: "9090"
+    - run: "kubectl get deploy api -n ckad -o jsonpath='{.spec.template.spec.containers[1].ports[0].name}'"
+      equals: "metrics"
+    - run: "kubectl get deploy api -n ckad -o jsonpath='{.spec.replicas}'"
+      equals: "2"

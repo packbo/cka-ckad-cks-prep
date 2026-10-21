@@ -719,6 +719,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": "not found"}, 404)
 
     def do_POST(self):
+        # raw binary DB upload (no base64/json): body IS the sqlite file
+        if self.path == "/api/db/upload-raw":
+            length = int(self.headers.get("Content-Length", 0))
+            raw = self.rfile.read(length) if length else b""
+            return self._import_db_bytes(raw)
+
         try:
             length = int(self.headers.get("Content-Length", 0))
             data = json.loads(self.rfile.read(length) or b"{}")
@@ -978,7 +984,15 @@ class Handler(BaseHTTPRequestHandler):
         exam_name = str(data.get("exam", "web-exam.yaml")).strip()
         if cert not in ("cka", "ckad", "cks"):
             return self._json({"error": "unknown cert"}, 400)
-        STATE.load(cert=cert, exam_name=exam_name)
+        if not exam_name.endswith(".yaml"):
+            exam_name += ".yaml"
+        exam_path = os.path.join(EXAMS_ROOT, cert, exam_name)
+        if not os.path.exists(exam_path):
+            return self._json({"error": f"exam not found: {cert}/{exam_name}"}, 404)
+        try:
+            STATE.load(cert=cert, exam_name=exam_name)
+        except Exception as e:
+            return self._json({"error": f"exam load failed: {e}"}, 500)
         STATE.started_at = None
         STATE.persist()
         return self._json({"ok": True, "cert": cert, "exam": exam_name,
@@ -991,25 +1005,40 @@ class Handler(BaseHTTPRequestHandler):
         STATE.load()
         return self._json({"ok": True, "message": "Session reset — all results cleared"})
 
-    def _api_db_upload(self, data):
-        import base64
+    def _import_db_bytes(self, raw: bytes):
         import tempfile
         from cka_sim import db
+        if not raw:
+            return self._json({"error": "empty file"}, 400)
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        try:
+            db.import_db(tmp_path)  # validates + auto-repairs, raises ValueError
+            STATE.load()
+            return self._json({"ok": True,
+                               "message": "Database imported (backup saved as .bak)",
+                               "questions": len(STATE.questions)})
+        except ValueError as e:
+            return self._json({"error": str(e)}, 400)
+        except Exception as e:
+            return self._json({"error": f"import failed: {e}"}, 500)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    def _api_db_upload(self, data):
+        import base64
         b64 = data.get("data", "")
         if not b64:
             return self._json({"error": "no data provided"}, 400)
         try:
             raw = base64.b64decode(b64)
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
-                tmp.write(raw)
-                tmp_path = tmp.name
-            db.import_db(tmp_path)
-            os.unlink(tmp_path)
-            STATE.load()
-            return self._json({"ok": True, "message": "Database imported",
-                               "questions": len(STATE.questions)})
-        except Exception as e:
-            return self._json({"error": str(e)}, 400)
+        except Exception:
+            return self._json({"error": "bad base64 data"}, 400)
+        return self._import_db_bytes(raw)
 
     def _db_download(self):
         import base64

@@ -1,0 +1,38 @@
+id: startup-probe
+title: "Startup probe protecting a slow-starting app"
+domain: workloads
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`, create a Pod named `slowapp` (image `nginx:1.25`)
+  with:
+
+  - a `startupProbe`: httpGet on path `/`, port 80,
+    `periodSeconds: 5`, `failureThreshold: 30`
+  - a `livenessProbe`: httpGet on path `/`, port 80,
+    `periodSeconds: 10`
+
+  The startup probe must give the app up to 150s to boot before the
+  liveness probe takes over.
+hints:
+  - level: 1
+    text: "Probes live on the CONTAINER level: kubectl explain pod.spec.containers.startupProbe"
+  - level: 2
+    text: "kubectl run slowapp -n ckad --image=nginx:1.25 --port=80 $do > pod.yaml, then add startupProbe and livenessProbe (httpGet, path, port) under containers[0]."
+  - level: 3
+    text: "Pitfall: failureThreshold × periodSeconds = max startup time (30×5s=150s). The livenessProbe must NOT have its own failureThreshold set for this exercise."
+check:
+  assertions:
+    - run: "kubectl get pod slowapp -n ckad -o jsonpath='{.spec.containers[0].startupProbe.httpGet.path}'"
+      equals: "/"
+    - run: "kubectl get pod slowapp -n ckad -o jsonpath='{.spec.containers[0].startupProbe.failureThreshold}'"
+      equals: "30"
+    - run: "kubectl get pod slowapp -n ckad -o jsonpath='{.spec.containers[0].startupProbe.periodSeconds}'"
+      equals: "5"
+    - run: "kubectl get pod slowapp -n ckad -o jsonpath='{.spec.containers[0].livenessProbe.httpGet.path}'"
+      equals: "/"
+    - run: "kubectl get pod slowapp -n ckad -o jsonpath='{.spec.containers[0].livenessProbe.periodSeconds}'"
+      equals: "10"

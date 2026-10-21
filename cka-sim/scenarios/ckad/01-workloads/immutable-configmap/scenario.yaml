@@ -1,0 +1,34 @@
+id: immutable-configmap
+title: "Immutable ConfigMap"
+domain: workloads
+weight: 2
+difficulty: easy
+time_estimate: 150
+setup:
+  apply: setup.yaml
+question: |
+  In namespace `ckad`:
+
+  1. Create a ConfigMap `app-settings` with key `LOG_LEVEL` = `debug`,
+     marked **immutable**.
+  2. Create a Pod `consumer` (image `busybox:1.36`, command
+     `sh -c "env; sleep 3600"`) that injects `app-settings`
+     as **environment variables** (envFrom).
+
+  Once immutable, the ConfigMap cannot be updated — only deleted and
+  recreated (API protection against harmful updates).
+hints:
+  - level: 1
+    text: "The immutable flag is a top-level ConfigMap field: kubectl explain cm --recursive | grep -i immutable"
+  - level: 2
+    text: "kubectl create configmap app-settings -n ckad --from-literal=LOG_LEVEL=debug $do > cm.yaml, add immutable: true. Pod: envFrom: [{configMapRef: {name: app-settings}}]."
+  - level: 3
+    text: "Pitfall: trying to kubectl apply a change to an immutable ConfigMap is rejected by the API — that is the EXPECTED behaviour, do not fight it."
+check:
+  assertions:
+    - run: "kubectl get cm app-settings -n ckad -o jsonpath='{.data.LOG_LEVEL}'"
+      equals: "debug"
+    - run: "kubectl get cm app-settings -n ckad -o jsonpath='{.immutable}'"
+      equals: "true"
+    - run: "kubectl get pod consumer -n ckad -o jsonpath='{.spec.containers[0].envFrom[0].configMapRef.name}'"
+      contains: "app-settings"
