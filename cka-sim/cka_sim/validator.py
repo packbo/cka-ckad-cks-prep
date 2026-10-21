@@ -1,6 +1,7 @@
 """Validate a scenario by running assertions against the live cluster."""
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass, field
 from typing import List
@@ -105,9 +106,16 @@ def _evaluate_once(assertion: dict) -> AssertionResult:
             with open(assertion["file"]) as fh:
                 value = fh.read().strip()
         except FileNotFoundError:
+            detail = f"❌ file not found: {assertion['file']}"
+            if os.environ.get("KUBERNETES_SERVICE_HOST"):
+                # web server runs inside the cluster pod: a file written on the
+                # user's HOST is invisible here — it must be written in the
+                # web terminal (same container as this checker)
+                detail += (" — the checker runs inside the cluster: write the file "
+                           "in the WEB terminal (right panel), not in your host shell")
             return AssertionResult(
                 False,
-                f"❌ file not found: {assertion['file']}",
+                detail,
                 command=f"cat {assertion['file']}",
                 expected=str(assertion.get("equals", assertion.get("contains", ""))),
                 got="(missing)",
@@ -119,30 +127,30 @@ def _evaluate_once(assertion: dict) -> AssertionResult:
         expected = str(assertion["equals"]).strip()
         ok = value == expected
         if ok:
-            return AssertionResult(True, f"✅ {cmd_desc} == '{expected}'", assertion["run"], expected, value)
+            return AssertionResult(True, f"✅ {cmd_desc} == '{expected}'", assertion.get("run", assertion.get("file", "")), expected, value)
         if not value:
             hint = _diagnose_empty(expected, assertion)
             return AssertionResult(
                 False,
                 f"❌ {cmd_desc}\n   expected: '{expected}'\n   got: (empty)\n   💡 {hint}",
-                assertion["run"], expected, value,
+                assertion.get("run", assertion.get("file", "")), expected, value,
             )
         return AssertionResult(
             False,
             f"❌ {cmd_desc}\n   expected: '{expected}'\n   got: '{value}'",
-            assertion["run"], expected, value,
+            assertion.get("run", assertion.get("file", "")), expected, value,
         )
     if "contains" in assertion:
         needle = str(assertion["contains"])
         ok = needle in value
         if ok:
-            return AssertionResult(True, f"✅ {cmd_desc} contains '{needle}'", assertion["run"], needle, value)
+            return AssertionResult(True, f"✅ {cmd_desc} contains '{needle}'", assertion.get("run", assertion.get("file", "")), needle, value)
         return AssertionResult(
             False,
             f"❌ {cmd_desc}\n   expected to contain: '{needle}'\n   got: '{value[:80]}'",
-            assertion["run"], needle, value,
+            assertion.get("run", assertion.get("file", "")), needle, value,
         )
-    return AssertionResult(True, f"✅ {cmd_desc} (ran OK)", assertion["run"], "", value)
+    return AssertionResult(True, f"✅ {cmd_desc} (ran OK)", assertion.get("run", assertion.get("file", "")), "", value)
 
 
 def run_all(assertions: List[dict]):

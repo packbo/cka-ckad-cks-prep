@@ -131,3 +131,50 @@ check:
 
 L'IA écrit ce YAML dans `scenarios/<cert>/<domain>/<id>/scenario.yaml` (+ setup.yaml),
 puis lance `./run.sh run <id>` pour valider que setup + assertions passent.
+
+## Onglet web « AI assisted Learning » (génération LIVE)
+
+L'UI web (`./run.sh web`) expose un onglet **🤖 AI assisted Learning** : les
+exercices générés en direct par l'IA y apparaissent **automatiquement**,
+sans redémarrer le serveur web et sans casser l'onglet Exam.
+
+### Protocole de génération live
+
+1. **L'utilisateur demande un exercice** (prompt libre, ex: « un exercice sur
+   les NetworkPolicies avec un piège sur les namespaces »).
+2. **L'IA écrit l'exercice** dans la banque dédiée :
+   ```
+   cka-sim/scenarios/ai/<id>/scenario.yaml   # même format que §Template
+   cka-sim/scenarios/ai/<id>/setup.yaml      # optionnel (pré-création)
+   ```
+   - `id` unique et parlant : `ai-<topic>-<n>` (ex: `ai-netpol-1`)
+   - `weight` = points de l'exercice, `difficulty` = easy|medium|hard
+   - `setup.apply` prépare le cluster/namespace ; les assertions `check:`
+     sont OBLIGATOIRES (c'est elles qui alimentent le bouton **Check**).
+3. **Hot-reload** : le serveur web scanne `scenarios/ai/` à chaque appel de
+   l'API (`/api/ai/list`, auto-refresh 15 s quand l'onglet est ouvert).
+   Aucun restart, aucune interruption de l'examen en cours.
+4. **Validation avant livraison** (l'IA teste son propre exercice) :
+   ```bash
+   kubectl apply -f cka-sim/scenarios/ai/<id>/setup.yaml   # le setup passe ?
+   # résoudre l'exercice dans le cluster, puis :
+   curl -X POST localhost:8080/api/ai/check -d '{"id":"<id>"}' -H 'Content-Type: application/json'
+   # → tous "passed": true ; puis reset pour rendre l'exercice vierge :
+   curl -X POST localhost:8080/api/ai/reset -d '{"id":"<id>"}' -H 'Content-Type: application/json'
+   ```
+   Vérifier aussi le YAML : `python3 -c "import yaml;yaml.safe_load(open('<file>'))"`.
+5. **Scoring automatique** : hint 1 = -10 %, hint 2 = -25 %, hint 3 = -40 %,
+   solution = 0 %. Status `pending → active → done` (validé) ou `skipped`.
+   Une question validée **reste `done`** même si on la re-clique.
+6. **Ne jamais modifier** les banques `scenarios/cka|ckad|cks/` pour la
+   génération live — uniquement `scenarios/ai/` (séparation exam / AI).
+
+### Contraintes
+
+- Préparer le cluster **sans casser l'UI web** : n'utiliser que `kubectl
+  apply/delete` ciblés (namespaces préfixés `ai-` si possible), jamais de
+  reset global (`db/reset` / `:reset`) pendant qu'un examen tourne.
+- Les placeholders `%CP%`, `%WORKER%`… sont substitués automatiquement dans
+  question/hints — les utiliser pour les noms de nœuds.
+- `requires: {workers: N}` : les exercices sont filtrés si le cluster est
+  trop petit (détection auto).

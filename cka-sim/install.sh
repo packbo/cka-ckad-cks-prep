@@ -26,7 +26,25 @@ install_kubectl() {
 }
 
 command -v kubectl >/dev/null 2>&1 || install_kubectl
+command -v curl   >/dev/null 2>&1 || { apt-get update -qq && as_root apt-get install -y -qq curl; } || true
 echo "kubectl: $(kubectl version --client 2>/dev/null | head -1 | awk '{print $3}')"
+
+# --- GitHub CLI (best effort — used to clone/PR from private repos) ---------
+if ! command -v gh >/dev/null 2>&1; then
+  echo "installing GitHub CLI (gh) ..."
+  (
+    as_root mkdir -p /etc/apt/keyrings
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      | as_root tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+    as_root chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture 2>/dev/null || echo amd64) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      | as_root tee /etc/apt/sources.list.d/github-cli.list >/dev/null
+    as_root apt-get update -qq && as_root apt-get install -y -qq gh
+  ) >/dev/null 2>&1 && echo "gh: $(gh --version 2>/dev/null | head -1)" \
+    || echo "gh: install skipped (no apt or no network) — not critical"
+else
+  echo "gh: $(gh --version 2>/dev/null | head -1)"
+fi
 
 ENV_MODE=""
 if have_cluster; then
@@ -39,7 +57,7 @@ if have_cluster; then
   echo ""
 else
   ENV_MODE="fresh"
-  echo "No cluster detected — fresh VPS/bare-metal path: kind + multi-node cluster."
+  echo "No cluster detected — fresh VPS/bare-metal path: docker + kind multi-node cluster."
   command -v docker >/dev/null 2>&1 || {
     echo "ERROR: docker is required to run kind. Install it first:"
     echo "  curl -fsSL https://get.docker.com | sh"
@@ -76,18 +94,9 @@ if ! kubectl -n kube-system get deploy metrics-server >/dev/null 2>&1; then
   echo "Installing metrics-server (v0.7.2, kind-compatible)..."
   kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.7.2/components.yaml >/dev/null 2>&1
   # kind needs: kubelet-insecure-tls + root user (emptyDir cert generation)
-  kubectl -n kube-system patch deploy metrics-server -p='{
-    "spec":{"template":{
-      "spec":{
-        "securityContext":{"runAsUser":0,"runAsNonRoot":false},
-        "containers":[{"name":"metrics-server","args":[
-          "--cert-dir=/tmp","--secure-port=10250",
-          "--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
-          "--kubelet-insecure-tls","--metric-resolution=15s"
-        ],"securityContext":{"runAsUser":0,"runAsNonRoot":false,"allowPrivilegeEscalation":false}}]
-      }
-    }
-  }' >/dev/null 2>&1
+  # NOTE: keep this patch JSON on ONE line — multiline -p breaks on kubectl>=1.33
+  kubectl -n kube-system patch deploy metrics-server --type=strategic -p '{"spec":{"template":{"spec":{"securityContext":{"runAsUser":0,"runAsNonRoot":false},"containers":[{"name":"metrics-server","args":["--cert-dir=/tmp","--secure-port=10250","--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname","--kubelet-insecure-tls","--metric-resolution=15s"],"securityContext":{"runAsUser":0,"runAsNonRoot":false,"allowPrivilegeEscalation":false}}]}}}}' \
+    || echo "⚠ metrics-server patch failed — kubectl top may not work"
   kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s 2>&1 | tail -1
 fi
 
@@ -141,8 +150,136 @@ echo ""
 echo "=== Setup complete (${ENV_MODE} environment) ==="
 kubectl get nodes
 echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════
+# AUTO-LAUNCH the web exam UI in the background, then print how to reach it.
+#   - server-like host WITH a preinstalled cluster (Killercoda): local python
+#     server on :8080 -> open the "Traffic Port" tab and enter 8080
+#   - fresh host (docker/kind): image built + deployed -> NodePort 30999
+# ═══════════════════════════════════════════════════════════════════════════
+WEB_LOG=/tmp/cka-sim-web.log
+WEB_PIDFILE=/tmp/cka-sim-web.pid
+MARKER=/tmp/cka-web-access.txt
+WEB_PORT="${CKA_SIM_WEB_PORT:-8080}"
+
+http_ok() { curl -sf -o /dev/null --max-time 3 "$1" 2>/dev/null; }
+
+first_node_ip() {
+  kubectl get nodes -o jsonpath='{range .items[*]}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}' 2>/dev/null | head -1
+}
+
+nodeport_of_service() {
+  kubectl get svc cka-exam -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null
+}
+
+is_killercoda_like() {
+  # the terminal itself sits on a kubernetes node (kubeadm/Killercoda playgrounds)
+  [ -d /etc/kubernetes/manifests ]
+}
+
+is_kind_cluster() {
+  # same condition as `run.sh web`: kind context -> web deployed in-cluster (NodePort)
+  kubectl config current-context 2>/dev/null | grep -q '^kind-' \
+    || { command -v kind >/dev/null 2>&1 && kind get clusters 2>/dev/null | grep -q .; }
+}
+
+launch_web_bg() {
+  if [ -f "$WEB_PIDFILE" ] && kill -0 "$(cat "$WEB_PIDFILE" 2>/dev/null)" 2>/dev/null; then
+    echo "(web already running, pid $(cat "$WEB_PIDFILE"))"
+    return 0
+  fi
+  echo "Launching web exam UI in background (log: $WEB_LOG) ..."
+  nohup ./run.sh web >>"$WEB_LOG" 2>&1 &
+  echo $! > "$WEB_PIDFILE"
+}
+
+echo "=== Web exam UI ==="
+
+# ── which serving mode? ─────────────────────────────────────────────────────
+#  kind cluster OR fresh install  -> web as a POD in the cluster (NodePort)
+#  preinstalled/managed cluster   -> local python web server on :8080
+WEB_MODE="nodeport"
+if [ "$ENV_MODE" = "existing" ] && ! is_kind_cluster; then
+  WEB_MODE="local"
+fi
+
+if [ "$WEB_MODE" = "local" ]; then
+  # ── preinstalled cluster (Killercoda / managed): local web server :8080 ──
+  if http_ok "http://localhost:${WEB_PORT}/api/state"; then
+    echo "web UI already listening on :${WEB_PORT}"
+  else
+    launch_web_bg
+    echo -n "waiting for the web server on :${WEB_PORT} "
+    for _ in $(seq 1 30); do
+      http_ok "http://localhost:${WEB_PORT}/api/state" && break
+      echo -n "."; sleep 2
+    done
+    echo ""
+  fi
+
+  if http_ok "http://localhost:${WEB_PORT}/api/state"; then
+    if is_killercoda_like; then
+      cat <<EOF | tee "$MARKER"
+
+───────────────────────────────────────────────────────────────
+ 🎓  WEB EXAM UI READY — running in the background on :${WEB_PORT}
+ ➜  Open the "Traffic Port" tab (top bar, right of "Terminal")
+    and enter the port:   ${WEB_PORT}
+    The exam page (questions left, real terminal right) opens.
+───────────────────────────────────────────────────────────────
+EOF
+    else
+      cat <<EOF | tee "$MARKER"
+
+ 🎓 WEB EXAM UI READY — http://localhost:${WEB_PORT}
+ (remote host? ssh -L 8080:localhost:8080 <this-host>)
+EOF
+    fi
+  else
+    echo "⚠ web server did not come up — inspect $WEB_LOG"
+    echo "(start manually with: ./run.sh web)"
+  fi
+
+else
+  # ── kind / fresh: web deployed in-cluster (NodePort) ──
+  NP="$(nodeport_of_service || true)"
+  IP="$(first_node_ip || true)"
+  if [ -n "$NP" ] && [ -n "$IP" ] && http_ok "http://${IP}:${NP}/api/state"; then
+    echo "web UI already deployed (NodePort ${NP})"
+  else
+    launch_web_bg
+    echo -n "building + deploying the web UI (docker build can take 1-3 min) "
+    for _ in $(seq 1 180); do
+      NP="$(nodeport_of_service || true)"
+      IP="$(first_node_ip || true)"
+      if [ -n "$NP" ] && [ -n "$IP" ] && http_ok "http://${IP}:${NP}/api/state"; then break; fi
+      echo -n "."; sleep 3
+    done
+    echo ""
+  fi
+
+  NP="$(nodeport_of_service || true)"
+  IP="$(first_node_ip || true)"
+  if [ -n "$NP" ] && http_ok "http://${IP}:${NP}/api/state"; then
+    PUB_IP="$(curl -4 -sf --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
+    cat <<EOF | tee "$MARKER"
+
+───────────────────────────────────────────────────────────────
+ 🎓  WEB EXAM UI READY — NodePort ${NP}
+ ➜  on this host     :  http://${IP}:${NP}
+ ➜  from your browser:  http://${PUB_IP:-<public-ip>}:${NP}   (open the firewall)
+    fallback          :  kubectl port-forward svc/cka-exam 8080:80
+                        -> http://localhost:8080
+───────────────────────────────────────────────────────────────
+EOF
+  else
+    echo "⚠ web deployment not ready — inspect $WEB_LOG  (or run: ./run.sh web)"
+  fi
+fi
+
+echo ""
 echo "Next:"
 echo "  ./run.sh list                  # scenario bank (cka by default)"
 echo "  ./run.sh run create-deploy     # one scenario"
-echo "  ./run.sh web                   # browser exam UI (NodePort 30999)"
-echo "  ./run.sh --cert ckad list      # once CKAD scenarios are added"
+echo "  ./run.sh web                   # (re)start the browser exam UI"
+echo "  ./run.sh --cert ckad list      # CKAD bank"

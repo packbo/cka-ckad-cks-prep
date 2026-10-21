@@ -10,8 +10,9 @@ per certification**:
 ```
 cka-sim/
 ├── scenarios/cka/...     today's bank (workloads, networking, storage, rbac...)
-├── scenarios/ckad/       drop CKAD scenarios here (same format)
-├── scenarios/cks/        drop CKS scenarios here (same format)
+├── scenarios/ckad/       CKAD bank (same format)
+├── scenarios/cks/        CKS bank (same format)
+├── scenarios/ai/         🤖 AI-assisted Learning bank (live generation, web tab)
 └── exams/cka|ckad|cks/   full-exam.yaml + web-exam.yaml per cert
 ```
 
@@ -38,32 +39,39 @@ bash install.sh          # kind + deps (venv only if python is externally-manage
 | `./run.sh up` / `down` / `reset` | Manage the kind cluster |
 | `./run.sh status` | Show tooling/cluster status |
 
-## Web mode (Killercoda-style, NodePort)
+## Web mode (Killercoda-style: questions left, real terminal right)
 
 ```bash
-./run.sh web        # builds image, deploys cka-exam, prints the traffic port
+./run.sh web        # kind cluster: build+deploy in-cluster (NodePort 30999)
+                    # existing cluster (Killercoda/managed): local server on :8080
 ```
 
-The `cka-exam` Service is a **NodePort (30999, >30000 like Killercoda)**. Four tabs:
+Split-pane page like the real Killercoda player: **questions + buttons on the
+left, a real bash terminal (PTY over WebSocket, xterm.js) on the right** — the
+divider is draggable (double-click resets, position saved). Tab-completion,
+vim, Ctrl+C… all work in the web terminal.
+
+Left-panel tabs:
 
 | Tab | Content |
 |-----|---------|
-| **Exam** | Questions with hints (levels 1-4 + penalties), built-in terminal (run `kubectl` from the browser), Check button, live score and per-domain report |
-| **Cheatsheet & Hints** | All research methods: `paths(scalars)`, `explain --recursive`, list-vs-single, filters... |
+| **Exam** | Questions with hints (levels 1-4 + penalties), Check button (status `pending → active → done`), live score, per-domain report, session DB (download/import/reset) |
+| **🤖 AI assisted Learning** | Exercises **generated live** by opencode/Claude in `scenarios/ai/` — hot-reloaded (no restart), with Check + scoring identical to the exam. Protocol: root `AGENTS.md` |
+| **Cheatsheet** | All research methods: `paths(scalars)`, `explain --recursive`, list-vs-single, filters... |
 | **Docs** | kubernetes.io links (allowed during the exam), each opening in a **new tab** |
-| **Access** | The traffic port to enter + how to open it (Killercoda tab / local node IPs / port-forward fallback) |
 
 How to open:
 
-- **Killercoda**: open the *Traffic Port* tab (right of Terminal) and enter `30999`
-- **Local kind**: `http://<node-ip>:30999` (node IPs printed by `./run.sh web`, also shown in the header chip and the Access tab)
-- **Fallback**: `kubectl port-forward svc/cka-exam 8080:80` → http://localhost:8080 (`./run.sh webstop` to stop it)
+- **Killercoda (preinstalled cluster)**: web runs locally on **:8080** — open
+  the *Traffic Port* tab (right of Terminal) and enter **8080**
+- **kind**: `http://<node-ip>:30999` (NodePort 30999, printed by `./run.sh web`
+  and by `bash install.sh` at the end; also shown in the header chip)
+- **Fallback**: `kubectl port-forward svc/cka-exam 8080:80` → http://localhost:8080 (`./run.sh webstop`)
 
-The exam server runs **in-cluster** (pod `cka-exam`, ServiceAccount with broad
-RBAC — local training cluster only). Web exam = `exams/web-exam.yaml`
-(8 questions; `etcd-backup` stays CLI-only as it needs the host docker socket).
-Re-running `./run.sh web` rebuilds the image and restarts the pod (fresh exam
-state).
+On kind the exam server runs **in-cluster** (pod `cka-exam`, ServiceAccount
+with broad RBAC — local training cluster only). Web exam = `exams/web-exam.yaml`
+(`etcd-backup` stays CLI-only as it needs the host docker socket).
+Re-running `./run.sh web` rebuilds the image and restarts the pod.
 
 ## Inside a scenario
 

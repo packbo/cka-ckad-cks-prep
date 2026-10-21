@@ -398,7 +398,7 @@ def cmd_web(args):
         env_vars["PYTHONPATH"] = root
         try:
             proc = subprocess.Popen(
-                ["python3", "-m", "cka_sim.web"],
+                [sys.executable, "-m", "cka_sim.web"],
                 cwd=root, env=env_vars,
             )
             proc.wait()

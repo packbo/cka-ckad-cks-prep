@@ -2,145 +2,276 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CKA Exam Simulator</title>
+<link rel="stylesheet" href="/vendor/xterm.css">
 <style>
+:root{--bg:#0f1420;--panel:#1a2233;--panel2:#141b2b;--txt:#dde5f2;--mut:#8b99b0;
+      --acc:#4da3ff;--ok:#3ecf8e;--bad:#ff6b6b;--hint:#c58aff;--line:#28324a;--warn:#ff9f43}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#0f1420;color:#dde5f2;min-height:100vh}
-header{display:flex;align-items:center;gap:12px;padding:10px 20px;background:#1a2233;border-bottom:1px solid #28324a;flex-wrap:wrap}
-header h1{font-size:16px;color:#4da3ff}
-.certbtn{background:transparent;border:1px solid #28324a;color:#8b99b0;padding:4px 12px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600}
-.certbtn.active{background:#4da3ff;color:#08121f;border-color:#4da3ff}
-.certbtn:hover:not(.active){color:#dde5f2}
-#timer{font-family:monospace;font-size:15px;color:#4da3ff;margin-left:auto}
-.tabs{display:flex;gap:2px;padding:0 20px;background:#1a2233}
-.tab{padding:8px 18px;cursor:pointer;color:#8b99b0;border:1px solid transparent;border-bottom:none;border-radius:6px 6px 0 0;font-size:14px}
-.tab.active{background:#141b2b;color:#dde5f2;border-color:#28324a}
-main{max-width:1100px;margin:0 auto;padding:16px}
-.card{background:#1a2233;border:1px solid #28324a;border-radius:8px;padding:14px;margin-bottom:14px}
-.card h3{font-size:13px;color:#8b99b0;text-transform:uppercase;margin-bottom:10px}
-button{background:#4da3ff;border:none;color:#08121f;font-weight:600;padding:7px 14px;border-radius:5px;cursor:pointer;font-size:13px;margin:2px}
+html,body{height:100%}
+body{font-family:system-ui,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);
+     display:flex;flex-direction:column;overflow:hidden}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+header{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);
+       border-bottom:1px solid var(--line);flex-wrap:wrap;flex:0 0 auto}
+header h1{font-size:15px;color:var(--acc);white-space:nowrap}
+.certbtn{background:transparent;border:1px solid var(--line);color:var(--mut);padding:4px 12px;
+         border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+.certbtn.active{background:var(--acc);color:#08121f;border-color:var(--acc)}
+.certbtn:hover:not(.active){color:var(--txt)}
+#examselect,#portchip{background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+      border-radius:5px;padding:4px 8px;font-size:12px}
+#portchip{color:var(--ok);font-family:ui-monospace,monospace;display:none}
+#score{color:var(--mut);font-size:12px}
+#timer{font-family:ui-monospace,monospace;font-size:15px;color:var(--acc);margin-left:auto;white-space:nowrap}
+#termstatus{width:9px;height:9px;border-radius:50%;background:var(--bad);display:inline-block;
+            margin-right:4px;flex:0 0 auto}
+#termstatus.on{background:var(--ok)}
+#termstatusLabel{font-size:11px;color:var(--mut);white-space:nowrap}
+
+/* ── split layout ───────────────────────────────────────────────────── */
+#layout{display:flex;flex:1 1 auto;min-height:0}
+#left{flex:0 0 auto;width:46%;min-width:280px;display:flex;flex-direction:column;min-height:0}
+#splitter{flex:0 0 6px;background:var(--panel);border-left:1px solid var(--line);
+          border-right:1px solid var(--line);cursor:col-resize;position:relative;flex:0 0 auto}
+#splitter::after{content:'';position:absolute;top:50%;left:1px;width:2px;height:28px;
+                 background:var(--line);transform:translateY(-14px);border-radius:2px}
+#splitter:hover::after,#splitter.drag::after{background:var(--acc)}
+#right{flex:1 1 auto;min-width:280px;display:flex;flex-direction:column;background:#0b101c;min-height:0}
+
+/* ── left: tabs + scrollable pages ──────────────────────────────────── */
+.tabs{display:flex;gap:2px;padding:0 12px;background:var(--panel);flex:0 0 auto}
+.tab{padding:8px 14px;cursor:pointer;color:var(--mut);border:1px solid transparent;border-bottom:none;
+     border-radius:6px 6px 0 0;font-size:13px;user-select:none}
+.tab.active{background:var(--panel2);color:var(--txt);border-color:var(--line)}
+#pages{flex:1 1 auto;overflow-y:auto;padding:12px;min-height:0}
+.page{display:none}.page.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:13px;margin-bottom:12px}
+.card h3{font-size:12px;color:var(--mut);text-transform:uppercase;margin-bottom:9px;letter-spacing:.05em}
+button{background:var(--acc);border:none;color:#08121f;font-weight:600;padding:6px 12px;border-radius:5px;
+       cursor:pointer;font-size:12px;margin:2px}
 button:hover{filter:brightness(1.15)}
-button.ghost{background:transparent;color:#dde5f2;border:1px solid #28324a}
-button.warn{background:#c58aff;color:#1d1226}
-button.ok{background:#3ecf8e}
-pre{background:#0b101c;border:1px solid #28324a;border-radius:6px;padding:10px;font-size:12px;overflow:auto;max-height:300px;white-space:pre-wrap}
-input.cmd{width:100%;background:#0b101c;border:1px solid #28324a;color:#dde5f2;border-radius:5px;padding:8px 10px;font-family:monospace;font-size:13px}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:6px 8px;border-bottom:1px solid #28324a;text-align:left}
-.st-solved{color:#3ecf8e}.st-pending{color:#8b99b0}.st-skipped{color:#ff6b6b}.st-active{color:#4da3ff}
-.qtext{background:#141b2b;border:1px solid #28324a;border-radius:6px;padding:12px;font-size:14px;line-height:1.5;white-space:pre-wrap}
-.hintbox{border-left:3px solid #c58aff;padding:6px 10px;margin:6px 0;background:#141b2b;font-size:13px}
-.bigscore{font-size:36px;font-weight:800}
-.pass{color:#3ecf8e}.fail{color:#ff6b6b}
-#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;z-index:100}
-#modal .box{background:#1a2233;border:2px solid #4da3ff;border-radius:10px;padding:28px;min-width:320px;text-align:center}
-#modal h2{color:#4da3ff;margin-bottom:20px}
-#banner{display:none;background:#1a2233;border:1px solid #4da3ff;border-radius:6px;padding:10px;margin-bottom:12px;font-size:14px}
-.docs a{color:#4da3ff;text-decoration:none;font-size:15px;display:block;padding:6px 0}
-button:disabled{cursor:not-allowed;filter:grayscale(0.5)}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+button.ghost{background:transparent;color:var(--txt);border:1px solid var(--line)}
+button.warn{background:var(--hint);color:#1d1226}
+button.ok{background:var(--ok)}
+button.danger{background:transparent;color:var(--bad);border:1px solid var(--bad)}
+button:disabled{cursor:not-allowed;filter:grayscale(.6);opacity:.5}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--mut);font-weight:600}
+.st-done,.st-solved{color:var(--ok)}.st-pending{color:var(--mut)}.st-skipped{color:var(--bad)}
+.st-active{color:var(--acc)}
+.qtext{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:12px;
+       font-size:13.5px;line-height:1.55;white-space:pre-wrap}
+.hintbox{border-left:3px solid var(--hint);padding:7px 10px;margin:7px 0;background:var(--panel2);
+         border-radius:0 6px 6px 0;font-size:13px;white-space:pre-wrap}
+.res-ok{color:var(--ok)}.res-bad{color:var(--bad)}
+.bigscore{font-size:34px;font-weight:800}
+.meta{color:var(--mut);font-size:12px}
+.k8slinks{margin-top:10px;padding:8px;background:var(--panel2);border:1px solid var(--line);
+          border-radius:5px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.k8slinks a{color:var(--acc);text-decoration:none;font-size:11px;padding:3px 7px;background:var(--panel);
+            border-radius:4px;border:1px solid var(--line)}
+#banner{display:none;background:var(--panel);border:1px solid var(--acc);border-radius:6px;
+        padding:9px;margin-bottom:10px;font-size:13px}
+.cheat{border-left:3px solid var(--acc);padding:8px 12px;margin:8px 0;background:var(--panel2);font-size:13px}
+.cheat code{display:block;background:#0b101c;padding:6px 8px;margin:4px 0;font-size:12px;
+            white-space:pre-wrap;word-break:break-word}
+.docs a{color:var(--acc);text-decoration:none;font-size:14px;display:block;padding:7px 0;
+        border-bottom:1px solid var(--line)}
+button:disabled{cursor:not-allowed}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .preparing{animation:pulse 1.5s ease-in-out infinite}
-.cheat{border-left:3px solid #4da3ff;padding:8px 12px;margin:8px 0;background:#141b2b;font-size:13px}
-.cheat code{display:block;background:#0b101c;padding:6px 8px;margin:4px 0;font-size:12px}
+
+/* ── right: terminal ────────────────────────────────────────────────── */
+.termhead{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);
+          border-bottom:1px solid var(--line);flex:0 0 auto}
+.termhead .t{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.termhead .dot{width:8px;height:8px;border-radius:50%;background:var(--bad);display:inline-block}
+.termhead .dot.on{background:var(--ok)}
+.termhead button{margin-left:auto;padding:3px 9px;font-size:11px}
+#termwrap{flex:1 1 auto;padding:4px;min-height:0}
+#term{height:100%}
+.termnote{font-size:10.5px;color:var(--mut);padding:0 10px 4px;white-space:nowrap;overflow:hidden;
+          text-overflow:ellipsis;flex:0 0 auto}
+
+/* ── modal ──────────────────────────────────────────────────────────── */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;
+       justify-content:center;z-index:100}
+#modal .box{background:var(--panel);border:2px solid var(--acc);border-radius:10px;padding:28px;
+            min-width:320px;text-align:center}
+#modal h2{color:var(--acc);margin-bottom:18px}
+
+/* ── small screens: stack vertically ────────────────────────────────── */
+@media(max-width:760px){
+  #layout{flex-direction:column}
+  #left{width:100%!important;min-width:0;max-height:55%}
+  #splitter{display:none}
+  #right{min-height:45%}
+}
 </style>
 </head>
 <body>
 
 <header>
   <h1>Exam Simulator</h1>
-  <button class="certbtn active" id="cert-cka" onclick="switchCert('cka')">CKA</button>
-  <button class="certbtn" id="cert-ckad" onclick="switchCert('ckad')">CKAD</button>
-  <button class="certbtn" id="cert-cks" onclick="switchCert('cks')">CKS</button>
-  <span id="score" style="color:#8b99b0;font-size:13px"></span>
+  <span style="display:flex;gap:4px;align-items:center">
+    <button class="certbtn active" id="cert-cka" onclick="switchCert('cka')">CKA</button>
+    <button class="certbtn" id="cert-ckad" onclick="switchCert('ckad')">CKAD</button>
+    <button class="certbtn" id="cert-cks" onclick="switchCert('cks')">CKS</button>
+  </span>
+  <select id="examselect" onchange="switchExam(this.value)"></select>
+  <span id="portchip" title="NodePort to enter in the Killercoda traffic-port tab"></span>
+  <span id="score"></span>
   <span id="timer">--:--</span>
+  <span style="display:flex;align-items:center;gap:5px">
+    <span id="termstatus"></span><span id="termstatusLabel">terminal</span>
+  </span>
 </header>
 
-<div class="tabs">
-  <div class="tab active" data-p="p-exam">Exam</div>
-  <div class="tab" data-p="p-cheat">Cheatsheet</div>
-  <div class="tab" data-p="p-docs">Docs</div>
+<div id="layout">
+  <!-- ══ LEFT: questions + buttons ══════════════════════════════════ -->
+  <div id="left">
+    <nav class="tabs">
+      <div class="tab active" data-p="p-exam">Exam</div>
+      <div class="tab" data-p="p-ai">🤖 AI assisted Learning</div>
+      <div class="tab" data-p="p-cheat">Cheatsheet</div>
+      <div class="tab" data-p="p-docs">Docs</div>
+    </nav>
+    <div id="pages">
+
+      <!-- ── EXAM tab ── -->
+      <div id="p-exam" class="page active">
+        <div id="banner"></div>
+        <div class="card">
+          <h3>Question</h3>
+          <div id="qmeta" class="meta" style="margin-bottom:8px"></div>
+          <div class="qtext" id="qtext">Select a question from the list below.</div>
+          <div id="hints"></div>
+          <div style="margin-top:9px">
+            <button class="ok" id="pausebtn" onclick="togglePause()">⏸ Pause</button>
+            <button class="warn" onclick="askHint(1)">Hint 1</button>
+            <button class="warn" onclick="askHint(2)">Hint 2</button>
+            <button class="warn" onclick="askHint(3)">Hint 3</button>
+            <button class="ghost" onclick="askHint(4)">Solution</button>
+            <button class="ok" onclick="checkQ()">Check</button>
+            <button class="ghost" onclick="skipQ()">Skip ⏭</button>
+            <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
+            <button class="ghost" onclick="resetQ()">↻ Reset</button>
+            <button id="nextbtn" style="display:none;font-weight:700;padding:8px 20px;font-size:13px" onclick="nextQ()">Next →</button>
+          </div>
+          <div class="k8slinks">
+            <span class="meta" style="text-transform:uppercase;margin-right:4px">📚 kubernetes.io</span>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/reference/kubectl/cheatsheet/">Cheat Sheet ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/reference/kubectl/jsonpath/">JSONPath ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/workloads/pods/">Pods ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/services-networking/service/">Services ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/services-networking/network-policies/">NetPol ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PV/PVC ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/configuration/configmap/">ConfigMaps ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/concepts/configuration/secret/">Secrets ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/">RBAC ↗</a>
+            <a target="_blank" rel="noopener" href="https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/">kubeadm ↗</a>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Questions</h3>
+          <table id="qtable"></table>
+        </div>
+        <div class="card">
+          <h3>Report</h3>
+          <div id="report" class="meta">Start the exam to see results.</div>
+        </div>
+        <div class="card">
+          <h3>Session Data (SQLite)</h3>
+          <div id="dbinfo" class="meta" style="margin-bottom:8px">Loading…</div>
+          <button class="ok" onclick="downloadDB()">⬇ Download DB</button>
+          <button class="ghost" onclick="document.getElementById('dbfile').click()">⬆ Import DB</button>
+          <button class="danger" onclick="resetSession()">🗑 Reset Session</button>
+          <input type="file" id="dbfile" accept=".db" style="display:none" onchange="uploadDB(this)">
+        </div>
+      </div>
+
+      <!-- ── AI ASSISTED LEARNING tab ── -->
+      <div id="p-ai" class="page">
+        <div class="card">
+          <h3>🤖 AI assisted Learning — live exercises</h3>
+          <div class="meta" style="margin-bottom:8px">
+            Exercises are generated <b>live</b> by the AI assistant (opencode) from your prompts.
+            Ask for an exercise in the terminal session, it appears here automatically.
+            Check &amp; scoring work exactly like in the exam tab.
+          </div>
+          <button class="ghost" onclick="loadAI()">↻ Refresh list</button>
+          <span id="airefresh" class="meta" style="margin-left:8px"></span>
+        </div>
+        <div class="card" id="aiqcard" style="display:none">
+          <h3>Exercise</h3>
+          <div id="aiqmeta" class="meta" style="margin-bottom:8px"></div>
+          <div class="qtext" id="aiqtext"></div>
+          <div id="aihints"></div>
+          <div style="margin-top:9px">
+            <button class="warn" onclick="aiHint(1)">Hint 1</button>
+            <button class="warn" onclick="aiHint(2)">Hint 2</button>
+            <button class="warn" onclick="aiHint(3)">Hint 3</button>
+            <button class="ghost" onclick="aiHint(4)">Solution</button>
+            <button class="ok" onclick="aiCheck()">Check</button>
+            <button class="ghost" onclick="aiSkip()">Skip</button>
+            <button class="ghost" onclick="aiReset()">↻ Reset</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Generated exercises</h3>
+          <table id="aitable"></table>
+        </div>
+        <div class="card">
+          <h3>AI session report</h3>
+          <div id="aireport" class="meta">No exercises yet.</div>
+        </div>
+      </div>
+
+      <!-- ── CHEATSHEET tab ── -->
+      <div id="p-cheat" class="page">
+        <div class="card"><h3>Research Methods</h3><div id="cheats"></div></div>
+      </div>
+
+      <!-- ── DOCS tab ── -->
+      <div id="p-docs" class="page">
+        <div class="card docs"><h3>kubernetes.io (opens in new tab)</h3><div id="doclist"></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ splitter ═══════════════════════════════════════════════════ -->
+  <div id="splitter" title="Drag to resize — double-click to reset"></div>
+
+  <!-- ══ RIGHT: real terminal ═══════════════════════════════════════ -->
+  <div id="right">
+    <div class="termhead">
+      <span class="dot" id="termdot"></span>
+      <span class="t">Terminal — real bash</span>
+      <button class="ghost" onclick="termRestart()">⟳ Reconnect</button>
+    </div>
+    <div id="termwrap"><div id="term"></div></div>
+    <div class="termnote">full PTY: Tab completion · Ctrl+C · vim · kubectl — work in the cluster from here</div>
+  </div>
 </div>
-
-<main>
-  <div id="banner"></div>
-
-  <div id="p-exam" class="page" style="display:block">
-    <div class="card">
-      <h3>Question</h3>
-      <div id="qmeta" style="color:#8b99b0;font-size:12px;margin-bottom:8px"></div>
-      <div class="qtext" id="qtext">Select a question from the list below.</div>
-      <div id="hints"></div>
-      <div style="margin-top:10px">
-        <button class="ok" id="pausebtn" onclick="togglePause()">⏸ Pause</button>
-        <button class="warn" onclick="askHint(1)">Hint 1</button>
-        <button class="warn" onclick="askHint(2)">Hint 2</button>
-        <button class="warn" onclick="askHint(3)">Hint 3</button>
-        <button class="ghost" onclick="askHint(4)">Solution</button>
-        <button class="ok" onclick="checkQ()">Check</button>
-        <button class="ghost" onclick="skipQ()">Skip ⏭</button>
-        <button class="ghost" id="tagbtn" onclick="tagQ()">★ Tag</button>
-        <button class="ghost" onclick="resetQ()">↻ Reset</button>
-        <button id="nextbtn" style="display:none;background:#3ecf8e;color:#08121f;font-weight:700;padding:8px 22px;font-size:14px" onclick="nextQ()">Next →</button>
-      </div>
-      <div style="margin-top:12px;padding:8px;background:#141b2b;border:1px solid #28324a;border-radius:5px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-        <span style="color:#8b99b0;font-size:11px;text-transform:uppercase;margin-right:4px">📚 kubernetes.io</span>
-        <a href="https://kubernetes.io/docs/reference/kubectl/cheatsheet/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Cheat Sheet ↗</a>
-        <a href="https://kubernetes.io/docs/reference/kubectl/jsonpath/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">JSONPath ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/workloads/pods/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Pods ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/services-networking/service/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Services ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">NetworkPolicies ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">PV/PVC ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/configuration/configmap/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">ConfigMaps ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/configuration/secret/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Secrets ↗</a>
-        <a href="https://kubernetes.io/docs/reference/access-authn-authz/rbac/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">RBAC ↗</a>
-        <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/" target="_blank" rel="noopener" style="color:#4da3ff;text-decoration:none;font-size:12px;padding:3px 8px;background:#1a2233;border-radius:4px;border:1px solid #28324a">Deployments ↗</a>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Terminal</h3>
-      <input class="cmd" id="cmd" placeholder="kubectl get pods (Enter to run)"
-             onkeydown="if(event.key==='Enter')runCmd()">
-      <pre id="out"></pre>
-    </div>
-    <div class="card">
-      <h3>Questions</h3>
-      <table id="qtable"></table>
-    </div>
-    <div class="card">
-      <h3>Report</h3>
-      <div id="report" style="color:#8b99b0">Start the exam to see results.</div>
-    </div>
-    <div class="card">
-      <h3>Session Data (SQLite)</h3>
-      <div id="dbinfo" style="color:#8b99b0;font-size:13px;margin-bottom:10px">Loading...</div>
-      <button class="ok" onclick="downloadDB()">⬇ Download DB</button>
-      <button class="ghost" onclick="document.getElementById('dbfile').click()">⬆ Import DB</button>
-      <button class="ghost" style="color:#ff6b6b" onclick="resetSession()">🗑 Reset Session</button>
-      <input type="file" id="dbfile" accept=".db" style="display:none" onchange="uploadDB(this)">
-    </div>
-  </div>
-
-  <div id="p-cheat" class="page" style="display:none">
-    <div class="card"><h3>Research Methods</h3><div id="cheats"></div></div>
-  </div>
-
-  <div id="p-docs" class="page" style="display:none">
-    <div class="card docs"><h3>kubernetes.io (opens in new tab)</h3><div id="doclist"></div></div>
-  </div>
-</main>
 
 <div id="modal">
   <div class="box">
     <h2>🎓 Choose your exam</h2>
-    <div style="margin-bottom:16px">
-      <div style="color:#8b99b0;font-size:13px;margin-bottom:6px">Certification</div>
+    <div style="margin-bottom:14px">
+      <div class="meta" style="margin-bottom:6px">Certification</div>
       <button class="certbtn active" id="m-cka" onclick="mCert('cka')">CKA</button>
       <button class="certbtn" id="m-ckad" onclick="mCert('ckad')">CKAD</button>
       <button class="certbtn" id="m-cks" onclick="mCert('cks')">CKS</button>
     </div>
-    <div style="margin-bottom:20px">
-      <div style="color:#8b99b0;font-size:13px;margin-bottom:6px">Exam</div>
-      <select id="m-exam" style="background:#141b2b;color:#dde5f2;border:1px solid #28324a;border-radius:5px;padding:8px 14px;font-size:14px">
+    <div style="margin-bottom:18px">
+      <div class="meta" style="margin-bottom:6px">Exam</div>
+      <select id="m-exam" style="background:var(--panel2);color:var(--txt);border:1px solid var(--line);
+              border-radius:5px;padding:8px 14px;font-size:14px">
         <option value="web-exam.yaml">web-exam (recommended)</option>
         <option value="full-exam.yaml">full-exam (all questions)</option>
       </select>
@@ -149,27 +280,30 @@ button:disabled{cursor:not-allowed;filter:grayscale(0.5)}
   </div>
 </div>
 
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/xterm-addon-fit.js"></script>
 <script>
-var CUR=-1, MCERT='cka', EXAM_MIN=0, ELAPSED=0, PAUSED=false;
+var CUR=-1, MCERT='cka', EXAM_MIN=0, ELAPSED=0, PAUSED=false, AICUR=null;
 function $(id){return document.getElementById(id)}
 
-// ── Tabs ──
+/* ═══════════════ TABS ═══════════════ */
 document.querySelectorAll('.tab').forEach(function(t){
   t.addEventListener('click',function(){
     document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active')});
-    document.querySelectorAll('.page').forEach(function(x){x.style.display='none'});
+    document.querySelectorAll('.page').forEach(function(x){x.classList.remove('active')});
     t.classList.add('active');
-    $(t.dataset.p).style.display='block';
+    $(t.dataset.p).classList.add('active');
+    if(t.dataset.p==='p-ai'){loadAI();}       // hot-reload AI list on tab open
   });
 });
 
-// ── API ──
+/* ═══════════════ API helper ═══════════════ */
 function api(path,body){
   var opts=body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{};
   return fetch('/api/'+path,opts).then(function(r){return r.json()});
 }
 
-// ── Timer (respects PAUSED) ──
+/* ═══════════════ TIMER ═══════════════ */
 setInterval(function(){
   if(!EXAM_MIN || PAUSED)return;
   var left=Math.max(0,EXAM_MIN*60-ELAPSED);ELAPSED++;
@@ -177,30 +311,20 @@ setInterval(function(){
   $('timer').textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
 },1000);
 
-// ── Pause/Resume ──
 function togglePause(){
   PAUSED=!PAUSED;
-  var btn=$('pausebtn');
-  var tmr=$('timer');
+  var btn=$('pausebtn'),tmr=$('timer');
   if(PAUSED){
     btn.textContent='▶ Resume';
-    btn.style.background='#ff9f43';
-    btn.style.color='#1a1a2e';
-    tmr.style.color='#ff9f43';
-    tmr.textContent='⏸ '+tmr.textContent;
     $('banner').style.display='block';
     $('banner').textContent='⏸ PAUSED — click ▶ Resume to continue';
   }else{
     btn.textContent='⏸ Pause';
-    btn.style.background='';
-    btn.style.color='';
-    tmr.style.color='';
-    tmr.textContent=tmr.textContent.replace('⏸ ','');
     $('banner').style.display='none';
   }
 }
 
-// ── State ──
+/* ═══════════════ EXAM STATE ═══════════════ */
 function refresh(){
   api('state').then(function(s){
     EXAM_MIN=s.minutes;ELAPSED=s.elapsed;
@@ -209,52 +333,41 @@ function refresh(){
     s.questions.forEach(function(q,i){
       got+=q.score;max+=q.weight;
       rows+='<tr style="cursor:pointer" onclick="loadQ('+i+')">'
-        +'<td>'+(i+1)+'</td><td>'+q.id+'</td><td>'+q.domain+'</td>'
-        +'<td class="st-'+q.status+'">'+q.status+'</td>'
+        +'<td>'+(i+1)+'</td><td>'+q.id+'</td><td class="st-'+q.status+'">'+q.status+'</td>'
         +'<td>'+q.score+'/'+q.weight+'</td><td>'+(q.hints_used||'-')+'</td></tr>';
     });
-    $('qtable').innerHTML='<tr><th>#</th><th>id</th><th>domain</th><th>status</th><th>score</th><th>hints</th></tr>'+rows;
+    $('qtable').innerHTML='<tr><th>#</th><th>id</th><th>status</th><th>score</th><th>hints</th></tr>'+rows;
     $('score').textContent=got.toFixed(1)+' / '+max;
-  }).catch(function(e){console.error('state error:',e)});
+  });
 }
 
-// ── Question ──
-// loadQ = select → show "Preparing..." while setup runs → reveal question
 function loadQ(i){
-  CUR=i;
+  CUR=i;AICUR=null;
   $('nextbtn').style.display='none';
-  // show loading state
-  $('qmeta').textContent='Question '+(i+1)+' — preparing environment...';
-  $('qtext').style.opacity='0.5';
+  $('qmeta').textContent='Question '+(i+1)+' — preparing environment…';
   $('qtext').classList.add('preparing');
-  $('qtext').textContent='⏳ Preparing environment (applying setup, creating namespaces and resources)...';
+  $('qtext').textContent='⏳ Preparing environment (applying setup, creating namespaces and resources)…';
   $('hints').innerHTML='';
-  // disable action buttons during setup
-  setButtons(false);
   api('start',{index:i}).then(function(d){
-    // setup done: reveal question
+    if(d.error){
+      $('qmeta').textContent='Question '+(i+1)+' — ⚠ setup failed';
+      $('qtext').classList.remove('preparing');
+      $('qtext').textContent='⚠ Setup failed — the question premise (namespaces/resources) was NOT created.\n'
+        +(d.detail||d.error)+'\n\n'
+        +'Check the cluster (kubectl get nodes) and click the question again.';
+      setButtons(true);
+      return;
+    }
     $('qmeta').textContent='Question '+(i+1)+' — ready ✅';
-    $('qtext').style.opacity='1';
     $('qtext').classList.remove('preparing');
     $('qtext').textContent=d.question;
-    setButtons(true);
     refresh();
-  }).catch(function(e){
-    console.error('loadQ error:',e);
-    $('qtext').style.opacity='1';
+  }).catch(function(){
     $('qtext').classList.remove('preparing');
     $('qtext').textContent='⚠ Failed to prepare question. Click it again.';
-    setButtons(true);
   });
 }
-function setButtons(enabled){
-  var ids=['pausebtn','tagbtn'];
-  document.querySelectorAll('#p-exam button').forEach(function(b){
-    if(b.id==='nextbtn')return; // next is managed separately
-    b.disabled=!enabled;
-    b.style.opacity=enabled?'1':'0.4';
-  });
-}
+
 function askHint(level){
   if(CUR<0)return;
   api('hint',{index:CUR,level:level}).then(function(d){
@@ -264,59 +377,47 @@ function askHint(level){
     refresh();
   });
 }
+
 function checkQ(){
   if(CUR<0)return;
   api('check',{index:CUR}).then(function(d){
     var html='';
     d.results.forEach(function(r){
-      html+='<div style="color:'+(r.passed?'#3ecf8e':'#ff6b6b')+'">'+(r.passed?'PASS':'FAIL')+' — '+r.detail+'</div>';
+      html+='<div class="'+(r.passed?'res-ok':'res-bad')+'">'+(r.passed?'PASS':'FAIL')+' — '+r.detail+'</div>';
     });
-    html+='<div><b>'+(d.passed?'SOLVED':'Not yet')+'</b> — score '+d.score+'/'+d.weight+'</div>';
+    html+='<div><b>'+(d.passed?'✅ DONE — validated':'Not yet')+'</b> — score '+d.score+'/'+d.weight+'</div>';
     $('hints').innerHTML+=('<div class="hintbox">'+html+'</div>');
     if(d.passed){
       $('banner').style.display='block';
-      $('banner').innerHTML='✅ SOLVED — '+d.score+'/'+d.weight+' points';
-      // show Next button (if not the last question)
+      $('banner').innerHTML='✅ DONE — '+d.score+'/'+d.weight+' points';
       api('state').then(function(s){
-        if(CUR < s.questions.length - 1){
-          $('nextbtn').style.display='inline-block';
-        }else{
-          $('nextbtn').style.display='none';
-          $('banner').innerHTML+=' — 🎉 LAST QUESTION! View the Report below.';
-        }
+        if(CUR < s.questions.length - 1){$('nextbtn').style.display='inline-block';}
+        else{$('banner').innerHTML+=' — 🎉 LAST QUESTION! View the Report.';}
       });
-    }else{
-      $('nextbtn').style.display='none';
-    }
+    }else{$('nextbtn').style.display='none';}
     refresh();showReport();
   });
 }
+
 function nextQ(){
   $('nextbtn').style.display='none';
-  if(CUR>=0){
-    api('state').then(function(s){
-      if(CUR < s.questions.length - 1){
-        loadQ(CUR+1);
-      }
-    });
-  }
+  if(CUR>=0){api('state').then(function(s){
+    if(CUR < s.questions.length - 1){loadQ(CUR+1);}
+  });}
 }
+
 function skipQ(){
   if(CUR<0)return;
   api('skip',{index:CUR}).then(function(){
     $('banner').style.display='block';
     $('banner').textContent='⏭ Skipped question '+(CUR+1);
     refresh();showReport();
-    // auto-advance to next question
     api('state').then(function(s){
-      if(CUR < s.questions.length - 1){
-        setTimeout(function(){loadQ(CUR+1)},500);
-      }else{
-        $('qtext').textContent='🎉 All questions processed. Check the Report below.';
-      }
+      if(CUR < s.questions.length - 1){setTimeout(function(){loadQ(CUR+1)},500);}
     });
   });
 }
+
 function tagQ(){
   if(CUR<0)return;
   api('tag',{index:CUR}).then(function(d){
@@ -324,6 +425,7 @@ function tagQ(){
     refresh();
   });
 }
+
 function resetQ(){
   if(CUR<0)return;
   api('reset',{index:CUR}).then(function(d){
@@ -332,20 +434,11 @@ function resetQ(){
   });
 }
 
-// ── Terminal ──
-function runCmd(){
-  var c=$('cmd').value.trim();if(!c)return;
-  api('cmd',{command:c}).then(function(d){
-    $('out').textContent=(d.stdout||'')+(d.stderr||'')+(d.rc?'\n[exit '+d.rc+']':'');
-  });
-}
-
-// ── Report ──
 function showReport(){
   api('report').then(function(d){
-    var cls=d.passed?'pass':'fail';
-    var html='<div class="bigscore '+cls+'">'+d.percent+'%</div>'
-      +'<div style="color:#8b99b0">'+d.earned.toFixed(1)+' / '+d.total+' — threshold '+d.threshold+'% — '+(d.passed?'PASS':'BELOW')+'</div>';
+    var html='<div class="bigscore" style="color:'+(d.passed?'var(--ok)':'var(--bad)')+'">'+d.percent+'%</div>'
+      +'<div class="meta">'+d.earned.toFixed(1)+' / '+d.total+' — threshold '+d.threshold+'% — '
+      +(d.passed?'PASS':'BELOW')+'</div>';
     html+='<table><tr><th>domain</th><th>score</th><th>max</th></tr>';
     d.domains.forEach(function(x){html+='<tr><td>'+x.domain+'</td><td>'+x.score.toFixed(1)+'</td><td>'+x.max+'</td></tr>'});
     html+='</table>';
@@ -353,7 +446,6 @@ function showReport(){
   });
 }
 
-// ── Cert switch ──
 function switchCert(cert){
   document.querySelectorAll('header .certbtn').forEach(function(b){b.classList.remove('active')});
   $('cert-'+cert).classList.add('active');
@@ -361,14 +453,34 @@ function switchCert(cert){
     $('banner').style.display='block';
     $('banner').textContent='Loaded '+cert.toUpperCase()+' — '+d.questions+' questions';
     refresh();showReport();
-    // auto-start question 0
-    if(d.questions>0){
-      loadQ(0);
-    }
+    if(d.questions>0){loadQ(0);}
   });
 }
 
-// ── Modal ──
+function switchExam(name){
+  if(!name)return;
+  var cert=$('cert-cka').classList.contains('active')?'cka':
+    $('cert-ckad').classList.contains('active')?'ckad':'cks';
+  api('cert',{cert:cert,exam:name}).then(function(d){
+    $('banner').style.display='block';
+    $('banner').textContent='Loaded '+cert.toUpperCase()+' / '+name+' — '+d.questions+' questions';
+    refresh();showReport();
+  });
+}
+
+function loadExams(){
+  api('exams').then(function(d){
+    var sel=$('examselect');
+    sel.innerHTML='<option value="">— exam —</option>';
+    (d.exams||[]).forEach(function(e){
+      var o=document.createElement('option');
+      o.value=e.name;o.textContent=e.cert+'/'+e.name;
+      sel.appendChild(o);
+    });
+  });
+}
+
+/* ═══════════════ START MODAL ═══════════════ */
 function mCert(c){
   MCERT=c;
   ['cka','ckad','cks'].forEach(function(x){$('m-'+x).classList.remove('active')});
@@ -383,25 +495,100 @@ function startExam(){
     $('banner').style.display='block';
     $('banner').textContent=MCERT.toUpperCase()+' / '+exam+' — '+d.questions+' questions loaded';
     refresh();showReport();
-    // auto-start question 0 so the namespace/setup is ready
-    if(d.questions>0){
-      loadQ(0);
-    }
+    if(d.questions>0){loadQ(0);}
   });
 }
 
-// ── Cheatsheet ──
+/* ═══════════════ AI ASSISTED LEARNING ═══════════════ */
+function loadAI(){
+  $('airefresh').textContent='refreshing…';
+  api('ai/list').then(function(d){
+    var rows='';
+    (d.exercises||[]).forEach(function(e){
+      rows+='<tr style="cursor:pointer" onclick="aiStart(\''+e.id+'\')">'
+        +'<td><b>'+e.id+'</b></td><td>'+e.title+'</td>'
+        +'<td class="st-'+e.status+'">'+e.status+'</td>'
+        +'<td>'+e.score+'/'+e.weight+'</td><td>'+e.difficulty+'</td></tr>';
+    });
+    $('aitable').innerHTML=rows
+      ?'<tr><th>id</th><th>title</th><th>status</th><th>score</th><th>level</th></tr>'+rows
+      :'<tr><td class="meta">No AI exercises yet — ask opencode in the terminal to generate one.</td></tr>';
+    $('airefresh').textContent=(d.exercises||[]).length+' exercise(s)';
+    aiReport();
+  });
+}
+function aiStart(id){
+  AICUR=id;CUR=-1;
+  $('aiqcard').style.display='block';
+  $('aiqmeta').textContent=id+' — preparing environment…';
+  $('aiqtext').classList.add('preparing');
+  $('aiqtext').textContent='⏳ Preparing environment…';
+  $('aihints').innerHTML='';
+  api('ai/start',{id:id}).then(function(d){
+    if(d.error){
+      $('aiqmeta').textContent=id+' — ⚠ setup failed';
+      $('aiqtext').classList.remove('preparing');
+      $('aiqtext').textContent='⚠ Setup failed: '+(d.detail||d.error)+'\nClick the exercise again.';
+      return;
+    }
+    $('aiqmeta').textContent=d.title+' — ready ✅  (work in the terminal on the right)';
+    $('aiqtext').classList.remove('preparing');
+    $('aiqtext').textContent=d.question;
+    loadAI();
+  });
+}
+function aiHint(level){
+  if(!AICUR)return;
+  api('ai/hint',{id:AICUR,level:level}).then(function(d){
+    var div=document.createElement('div');
+    div.className='hintbox';div.textContent=d.text;
+    $('aihints').appendChild(div);
+  });
+}
+function aiCheck(){
+  if(!AICUR)return;
+  api('ai/check',{id:AICUR}).then(function(d){
+    var html='';
+    d.results.forEach(function(r){
+      html+='<div class="'+(r.passed?'res-ok':'res-bad')+'">'+(r.passed?'PASS':'FAIL')+' — '+r.detail+'</div>';
+    });
+    html+='<div><b>'+(d.passed?'✅ DONE — validated':'Not yet')+'</b> — score '+d.score+'/'+d.weight+'</div>';
+    $('aihints').innerHTML+=('<div class="hintbox">'+html+'</div>');
+    loadAI();
+  });
+}
+function aiSkip(){if(!AICUR)return;api('ai/skip',{id:AICUR}).then(function(){loadAI()})}
+function aiReset(){
+  if(!AICUR)return;
+  api('ai/reset',{id:AICUR}).then(function(d){
+    $('aihints').innerHTML='';
+    if(d.question){$('aiqtext').textContent=d.question;}
+    loadAI();
+  });
+}
+function aiReport(){
+  api('ai/report').then(function(d){
+    $('aireport').innerHTML=d.count
+      ?'<div class="bigscore" style="color:var(--hint);font-size:26px">'+d.percent+'%</div>'
+       +'<div class="meta">'+d.solved+' solved / '+d.count+' exercises — '+d.earned+' / '+d.total+' points</div>'
+      :'No exercises yet.';
+  });
+}
+/* auto-refresh AI list every 15s while the tab is visible (live generation) */
+setInterval(function(){
+  if($('p-ai').classList.contains('active')){loadAI();}
+},15000);
+
+/* ═══════════════ CHEATSHEET + DOCS ═══════════════ */
 function loadCheats(){
   api('cheatsheet').then(function(d){
     var html='';
     (d.research_methods||[]).forEach(function(c){
-      html+='<div class="cheat"><b>'+c.need+'</b><code>'+c.how+'</code><span style="color:#8b99b0">'+c.note+'</span></div>';
+      html+='<div class="cheat"><b>'+c.need+'</b><code>'+c.how+'</code><span class="meta">'+c.note+'</span></div>';
     });
     $('cheats').innerHTML=html;
   });
 }
-
-// ── Docs ──
 function loadDocs(){
   var links=[
     ['kubectl Cheat Sheet','https://kubernetes.io/docs/reference/kubectl/cheatsheet/'],
@@ -420,14 +607,12 @@ function loadDocs(){
   $('doclist').innerHTML=html;
 }
 
-// ── Session DB ──
+/* ═══════════════ SESSION DB ═══════════════ */
 function loadDBInfo(){
   api('db/info').then(function(d){
     if(d.exists){
       $('dbinfo').textContent='💾 '+Math.round(d.size/1024)+'KB — cert='+d.session.cert+' — exam='+d.session.exam;
-    }else{
-      $('dbinfo').textContent='💾 No saved session yet';
-    }
+    }else{$('dbinfo').textContent='💾 No saved session yet';}
   });
 }
 function downloadDB(){
@@ -435,9 +620,7 @@ function downloadDB(){
     if(d.error){alert('No database to download');return}
     var blob=new Blob([atob(d.data)],{type:'application/octet-stream'});
     var a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=d.filename;
-    a.click();
+    a.href=URL.createObjectURL(blob);a.download=d.filename;a.click();
     URL.revokeObjectURL(a.href);
   });
 }
@@ -447,10 +630,9 @@ function uploadDB(input){
   reader.onload=function(){
     var b64=btoa(new Uint8Array(reader.result).reduce(function(d,b){d.push(String.fromCharCode(b));return d},[]).join(''));
     api('db/upload',{data:b64}).then(function(d){
-      if(d.ok){
-        alert('✅ Database imported — '+d.questions+' questions restored');
-        refresh();showReport();loadDBInfo();
-      }else{alert('Import failed: '+d.error)}
+      if(d.ok){alert('✅ Database imported — '+d.questions+' questions restored');
+        refresh();showReport();loadDBInfo();}
+      else{alert('Import failed: '+d.error)}
     });
   };
   reader.readAsArrayBuffer(file);
@@ -459,13 +641,108 @@ function resetSession(){
   if(!confirm('Reset ALL results and session data? This cannot be undone.'))return;
   api('db/reset',{}).then(function(d){
     alert('✅ '+d.message);
-    refresh();showReport();loadDBInfo();
+    refresh();showReport();loadDBInfo();loadAI();
     $('qtext').textContent='Session reset. Select a question to start.';
   });
 }
 
-// ── Init ──
-refresh();loadCheats();loadDocs();loadDBInfo();
+/* ═══════════════ ACCESS / PORT ═══════════════ */
+function loadAccess(){
+  api('access').then(function(d){
+    if(d.nodePort){$('portchip').style.display='inline';$('portchip').textContent='NodePort '+d.nodePort;}
+  }).catch(function(){});
+}
+
+/* ═══════════════ REAL TERMINAL (xterm.js ⇄ WS ⇄ PTY) ═══════════════ */
+var term,fitAddon,ws,wsTimer=null,decoder;
+function termInit(){
+  term=new Terminal({
+    fontSize:13, cursorBlink:true, scrollback:5000, convertEol:false,
+    theme:{background:'#0b101c',foreground:'#dde5f2',cursor:'#4da3ff',
+           selectionBackground:'#28324a'}
+  });
+  fitAddon=new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open($('term'));
+  decoder=new TextDecoder('utf-8',{fatal:false});
+  fitAddon.fit();
+  term.onData(function(data){
+    if(ws&&ws.readyState===1){ws.send(JSON.stringify({input:data}));}
+  });
+  term.onResize(function(sz){
+    if(ws&&ws.readyState===1){ws.send(JSON.stringify({resize:[sz.cols,sz.rows]}));}
+  });
+  wsConnect();
+}
+function wsConnect(){
+  if(ws){try{ws.close()}catch(e){}}
+  var proto=location.protocol==='https:'?'wss://':'ws://';
+  ws=new WebSocket(proto+location.host+'/ws');
+  ws.binaryType='arraybuffer';
+  ws.onopen=function(){
+    setTermStatus(true);
+    ws.send(JSON.stringify({resize:[term.cols,term.rows]}));
+  };
+  ws.onmessage=function(ev){
+    if(ev.data instanceof ArrayBuffer){
+      term.write(decoder.decode(new Uint8Array(ev.data),{stream:true}));
+    }else{
+      try{var m=JSON.parse(ev.data);if(m.status==='attached'){setTermStatus(true);}}catch(e){}
+    }
+  };
+  ws.onclose=function(){setTermStatus(false);wsTimer=setTimeout(wsConnect,1500);};
+  ws.onerror=function(){try{ws.close()}catch(e){}};
+}
+function termRestart(){
+  if(wsTimer){clearTimeout(wsTimer);wsTimer=null;}
+  wsConnect();
+}
+function setTermStatus(on){
+  $('termstatus').classList.toggle('on',on);
+  $('termdot').classList.toggle('on',on);
+  $('termstatusLabel').textContent=on?'terminal live':'reconnecting…';
+}
+
+/* ═══════════════ SPLITTER (draggable left ⇄ right) ═══════════════ */
+(function(){
+  var layout=$('layout'),left=$('left'),splitter=$('splitter'),drag=false;
+  function setPct(pct){
+    pct=Math.max(22,Math.min(78,pct));
+    left.style.width=pct+'%';
+    try{localStorage.setItem('splitPct',pct)}catch(e){}
+    if(fitAddon){setTimeout(function(){try{fitAddon.fit()}catch(e){}},0);}
+  }
+  var saved=null;
+  try{saved=localStorage.getItem('splitPct')}catch(e){}
+  if(saved){setPct(parseFloat(saved));}
+  splitter.addEventListener('mousedown',function(e){drag=true;splitter.classList.add('drag');e.preventDefault()});
+  document.addEventListener('mousemove',function(e){
+    if(!drag)return;
+    var r=layout.getBoundingClientRect();
+    setPct((e.clientX-r.left)/r.width*100);
+  });
+  document.addEventListener('mouseup',function(){
+    if(drag){drag=false;splitter.classList.remove('drag');}
+  });
+  /* touch support */
+  splitter.addEventListener('touchstart',function(e){drag=true;e.preventDefault()},{passive:false});
+  document.addEventListener('touchmove',function(e){
+    if(!drag)return;
+    var r=layout.getBoundingClientRect();
+    var x=e.touches[0].clientX;
+    setPct((x-r.left)/r.width*100);
+    e.preventDefault();
+  },{passive:false});
+  document.addEventListener('touchend',function(){drag=false});
+  splitter.addEventListener('dblclick',function(){setPct(46)});
+  window.addEventListener('resize',function(){
+    if(fitAddon){setTimeout(function(){try{fitAddon.fit()}catch(e){}},60);}
+  });
+})();
+
+/* ═══════════════ INIT ═══════════════ */
+termInit();
+refresh();loadCheats();loadDocs();loadDBInfo();loadAccess();loadExams();loadAI();
 </script>
 </body>
 </html>

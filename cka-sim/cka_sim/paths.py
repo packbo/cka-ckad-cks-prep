@@ -8,7 +8,7 @@ DATA_DIR = os.path.join(ROOT, "data")
 CHEATSHEET_PATH = os.path.join(DATA_DIR, "cheatsheet.json")
 
 DEFAULT_CERT = os.environ.get("CKA_SIM_CERT", "cka")
-CERTS = ("cka", "ckad", "cks")
+CERTS = ("cka", "ckad", "cks", "ai")  # 'ai' = AI-assisted Learning bank (web UI tab)
 
 _active_cert = DEFAULT_CERT
 

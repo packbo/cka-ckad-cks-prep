@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-lab-pre
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pre-existing
+  namespace: ai-lab-pre
+  labels:
+    app: pre
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pre
+  template:
+    metadata:
+      labels:
+        app: pre
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.25

@@ -28,5 +28,9 @@ check:
       contains: "web"
     - run: "kubectl get pod logger -n ckad -o jsonpath='{.spec.containers[*].name}'"
       contains: "logsidecar"
-    - run: "kubectl get pod logger -n ckad -o jsonpath='{.spec.volumes[0].emptyDir}'"
-      contains: "map"
+    # emptyDir is an empty map: jsonpath prints 'map[]' (kubectl<1.28) OR '{}'
+    # (newer) — assert on the KEY being present instead (stable across versions)
+    - run: "kubectl get pod logger -n ckad -o json | jq '.spec.volumes[] | select(.name==\"logdir\") | has(\"emptyDir\")'"
+      contains: "true"
+    - run: "kubectl get pod logger -n ckad -o json | jq '[.spec.containers[] | .volumeMounts[]? | select(.name==\"logdir\")] | length'"
+      contains: "2"

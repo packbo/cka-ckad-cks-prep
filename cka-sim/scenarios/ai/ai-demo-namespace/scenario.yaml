@@ -1,0 +1,28 @@
+id: ai-demo-namespace
+title: "AI Learning demo: namespace + labeled deploy"
+domain: ai-learning
+weight: 2
+difficulty: easy
+setup:
+  apply: setup.yaml
+question: |
+  This exercise was generated live by the AI assistant (opencode).
+
+  1. Create a namespace called `ai-lab`.
+  2. In that namespace, create a deployment named `demo` with image `nginx:1.25`
+     and 2 replicas.
+  3. Label the deployment `created-by=ai`.
+hints:
+  - { level: 1, text: "Orientation : kubectl create namespace / kubectl create deployment --image ... --replicas ... (imperative commands exist for all three steps)" }
+  - { level: 2, text: "Méthode : kubectl create deploy demo -n ai-lab --image=nginx:1.25 --replicas=2 puis kubectl label deploy demo -n ai-lab created-by=ai" }
+  - { level: 3, text: "Vérifiez avec : kubectl get deploy demo -n ai-lab -o jsonpath='{.spec.replicas} {.metadata.labels.created-by}'" }
+check:
+  assertions:
+    - run: "kubectl get ns ai-lab -o jsonpath='{.status.phase}'"
+      contains: "Active"
+    - run: "kubectl get deploy demo -n ai-lab -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      contains: "nginx:1.25"
+    - run: "kubectl get deploy demo -n ai-lab -o jsonpath='{.spec.replicas}'"
+      contains: "2"
+    - run: "kubectl get deploy demo -n ai-lab -o jsonpath='{.metadata.labels.created-by}'"
+      contains: "ai"

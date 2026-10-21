@@ -9,14 +9,29 @@ Sur n'importe quel playground **Ubuntu** de [killercoda.com](https://killercoda.
 curl -fsSL https://raw.githubusercontent.com/packbo/cka-ckad-cks-prep/main/killercoda/bootstrap.sh | bash
 ```
 
-Puis :
+À la fin, **l'UI web démarre automatiquement en arrière-plan** et le terminal
+affiche le port à ouvrir. Sur un playground avec cluster **préinstallé**
+(ex: *Kubernetes Cluster* de Killercoda) :
+
+```
+───────────────────────────────────────────────────────────────
+ 🎓  WEB EXAM UI READY — running in the background on :8080
+ ➜  Open the "Traffic Port" tab (top bar, right of "Terminal")
+    and enter the port:   8080
+───────────────────────────────────────────────────────────────
+```
+
+Sur un playground Ubuntu **vierge** (pas de cluster), le bootstrap installe
+docker + kind et l'UI est servie en **NodePort 30999** (URL affichée).
+
+En ligne de commande aussi :
 
 ```bash
 cd /root/cka-ckad-cks-prep/cka-sim
 ./run.sh list && ./run.sh run create-deploy
 ```
 
-Le script est **idempotent** : kubectl + kind + cluster 3 nœuds + dépôt cloné.
+Le script est **idempotent** : kubectl + gh + cluster + dépôt cloné + web auto-start.
 
 ### Tout-en-un (cluster + IA : npm → opencode → init)
 
