@@ -197,10 +197,20 @@ button:disabled{cursor:not-allowed}
       <!-- ── AI ASSISTED LEARNING tab ── -->
       <div id="p-ai" class="page">
         <div class="card">
+          <h3>💬 AI teacher — tell the AI what to do next</h3>
+          <div id="chatbox" style="max-height:220px;overflow-y:auto;background:var(--panel2);
+               border:1px solid var(--line);border-radius:6px;padding:8px;margin-bottom:8px;font-size:13px"></div>
+          <div style="display:flex;gap:6px">
+            <input id="chatinput" class="cmd" style="flex:1" placeholder="e.g. create a real hard scenario for cka about networking…"
+                   onkeydown="if(event.key==='Enter')chatSend()">
+            <button class="ok" onclick="chatSend()">Send</button>
+          </div>
+          <div id="chatstatus" class="meta" style="margin-top:6px"></div>
+        </div>
+        <div class="card">
           <h3>🤖 AI assisted Learning — live exercises</h3>
           <div class="meta" style="margin-bottom:8px">
-            Exercises are generated <b>live</b> by the AI assistant (opencode) from your prompts.
-            Ask for an exercise in the terminal session, it appears here automatically.
+            Exercises generated live by the AI assistant appear below (hot-reload).
             Check &amp; scoring work exactly like in the exam tab.
           </div>
           <button class="ghost" onclick="loadAI()">↻ Refresh list</button>
@@ -506,7 +516,48 @@ function startExam(){
   });
 }
 
-/* ═══════════════ AI ASSISTED LEARNING ═══════════════ */
+/* ═══════════════ AI TEACHER CHAT ═══════════════ */
+var CHAT_LAST=0, CHAT_NEWAI=false;
+function chatRender(msgs){
+  var box=$('chatbox'); if(!box)return;
+  msgs.forEach(function(m){
+    var div=document.createElement('div');
+    div.style.cssText=m.role==='user'
+      ?'text-align:right;margin:4px 0'
+      :'text-align:left;margin:4px 0';
+    var b=document.createElement('span');
+    b.style.cssText=m.role==='user'
+      ?'background:var(--acc);color:#08121f;border-radius:10px 10px 2px 10px;padding:5px 10px;display:inline-block;max-width:85%;white-space:pre-wrap'
+      :'background:#233;margin:0;border:1px solid var(--line);border-radius:10px 10px 10px 2px;padding:5px 10px;display:inline-block;max-width:85%;white-space:pre-wrap';
+    b.textContent=(m.role==='assistant'?'🤖 ':'')+m.text;
+    div.appendChild(b);box.appendChild(div);
+    CHAT_LAST=Math.max(CHAT_LAST,m.id);
+    if(m.role==='assistant'){CHAT_NEWAI=true;}
+  });
+  box.scrollTop=box.scrollHeight;
+}
+function chatPoll(){
+  api('ai/chat?since='+CHAT_LAST).then(function(d){
+    if((d.messages||[]).length){
+      chatRender(d.messages);
+      if(CHAT_NEWAI){loadAI();CHAT_NEWAI=false;}
+    }
+    var p=d.pending||0;
+    $('chatstatus').textContent=p
+      ?'⏳ '+p+' message(s) waiting for the AI agent (opencode)…'
+      :'AI agent idle — ask anything above';
+  }).catch(function(){});
+}
+function chatSend(){
+  var inp=$('chatinput');var t=inp.value.trim();if(!t)return;
+  inp.value='';
+  api('ai/chat',{message:t}).then(function(){chatPoll();});
+}
+/* chat polls every 5s while the AI tab is visible */
+setInterval(function(){
+  if($('p-ai').classList.contains('active')){chatPoll();}
+},5000);
+chatPoll();
 function loadAI(){
   $('airefresh').textContent='refreshing…';
   api('ai/list').then(function(d){

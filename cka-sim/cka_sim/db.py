@@ -158,3 +158,58 @@ def import_db(source_path: str):
         if os.path.exists(DB_PATH):
             shutil.copy2(DB_PATH, DB_PATH + ".bak")  # safety net
         shutil.copy2(source_path, DB_PATH)
+
+
+# ------------------------------------------------------- AI teacher chat --
+def _ensure_chat(c):
+    c.execute("""CREATE TABLE IF NOT EXISTS ai_chat (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        role TEXT NOT NULL,          -- 'user' | 'assistant'
+        text TEXT NOT NULL,
+        handled INTEGER DEFAULT 0,   -- user msgs: 0 = waiting for the agent
+        ts REAL
+    )""")
+    c.commit()
+
+
+def chat_add(role: str, text: str, handled: int = 0) -> int:
+    with _lock:
+        c = _conn(); _ensure_chat(c)
+        cur = c.execute(
+            "INSERT INTO ai_chat (role, text, handled, ts) VALUES (?,?,?,?)",
+            (role, text, handled, time.time()),
+        )
+        c.commit(); rid = cur.lastrowid; c.close()
+        return rid
+
+
+def chat_list(since_id: int = 0) -> list:
+    with _lock:
+        c = _conn(); _ensure_chat(c)
+        rows = c.execute(
+            "SELECT id, role, text, handled, ts FROM ai_chat WHERE id > ? "
+            "ORDER BY id ASC LIMIT 200", (since_id,),
+        ).fetchall()
+        c.close()
+        return [{"id": r[0], "role": r[1], "text": r[2],
+                 "handled": bool(r[3]), "ts": r[4]} for r in rows]
+
+
+def chat_pending() -> list:
+    """User messages the AI agent has not answered yet."""
+    with _lock:
+        c = _conn(); _ensure_chat(c)
+        rows = c.execute(
+            "SELECT id, text, ts FROM ai_chat WHERE role='user' AND handled=0 "
+            "ORDER BY id ASC", (),
+        ).fetchall()
+        c.close()
+        return [{"id": r[0], "text": r[1], "ts": r[2]} for r in rows]
+
+
+def chat_mark_all_handled() -> int:
+    with _lock:
+        c = _conn(); _ensure_chat(c)
+        cur = c.execute("UPDATE ai_chat SET handled=1 WHERE role='user' AND handled=0")
+        c.commit(); n = cur.rowcount; c.close()
+        return n

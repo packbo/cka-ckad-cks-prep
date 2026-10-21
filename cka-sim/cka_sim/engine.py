@@ -110,17 +110,25 @@ def _setup(scenario: Scenario, backend: ClusterBackend) -> bool:
     """Apply setup manifests + run break/fix script. Returns False on fatal setup failure."""
     sp = scenario.setup_fullpath
     if sp and os.path.exists(sp):
-        ui.info(f"[setup] resetting + applying {os.path.basename(sp)} ...")
-        # Delete first: kubectl apply alone NEVER reverts out-of-band patches
-        # (kubectl patch/edit/set image don't update last-applied-configuration),
-        # so a previously "solved" bug would survive and break the scenario
-        # premise on re-runs of the persistent kind cluster.
-        run_shell(
-            f"kubectl delete -f {sp} --ignore-not-found --wait=true --timeout=30s",
-            timeout=60,
-        )
-        _wait_namespaces_gone(sp)
-        backend.apply_file(sp)
+        # comment-only manifests (host-side scenarios) = nothing to create
+        try:
+            has_docs = any(d for d in yaml.safe_load_all(open(sp)) if d)
+        except Exception:
+            has_docs = True  # unreadable? let kubectl decide
+        if not has_docs:
+            pass  # no cluster resources — skip apply silently
+        else:
+            ui.info(f"[setup] resetting + applying {os.path.basename(sp)} ...")
+            # Delete first: kubectl apply alone NEVER reverts out-of-band patches
+            # (kubectl patch/edit/set image don't update last-applied-configuration),
+            # so a previously "solved" bug would survive and break the scenario
+            # premise on re-runs of the persistent kind cluster.
+            run_shell(
+                f"kubectl delete -f {sp} --ignore-not-found --wait=true --timeout=30s",
+                timeout=60,
+            )
+            _wait_namespaces_gone(sp)
+            backend.apply_file(sp)
     if scenario.setup_script:
         ui.info("[setup] preparing (break/fix) environment ...")
         for n, cmd in enumerate(scenario.setup_script, 1):

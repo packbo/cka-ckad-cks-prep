@@ -134,9 +134,33 @@ puis lance `./run.sh run <id>` pour valider que setup + assertions passent.
 
 ## Onglet web « AI assisted Learning » (génération LIVE)
 
-L'UI web (`./run.sh web`) expose un onglet **🤖 AI assisted Learning** : les
-exercices générés en direct par l'IA y apparaissent **automatiquement**,
-sans redémarrer le serveur web et sans casser l'onglet Exam.
+L'UI web (`./run.sh web`) expose un onglet **🤖 AI assisted Learning** avec :
+
+1. **💬 AI teacher chat** — l'utilisateur discute avec l'IA directement depuis
+   la page (« create a real hard scenario for cka »). Les messages sont dans
+   SQLite (`ai_chat`) ; l'agent les lit/répond via l'API.
+2. **Liste d'exercices générés live** — dropés dans `scenarios/ai/`, hot-reload.
+
+### Protocole chat (l'agent opencode POLL et RÉPOND)
+
+Pendant une session de tutorat, poller régulièrement (toutes les ~15 s) et
+traiter les messages en attente :
+
+```bash
+# 1. lire les messages en attente (user messages non traités + thread) :
+curl -s "localhost:8080/api/ai/chat" | jq '{pending, messages}'
+#    (sur kind/NodePort : curl -s http://<node-ip>:30999/api/ai/chat)
+
+# 2. faire ce que demande l'utilisateur (générer l'exercice — cf. ci-dessous),
+#    puis répondre + marquer traité :
+curl -s -X POST localhost:8080/api/ai/chat/reply \
+     -H 'Content-Type: application/json' \
+     -d '{"text":"Exercice ai-netpol-hard-1 créé (CKA networking, hard) — il apparaît dans la liste."}'
+```
+
+- Répondre **après** avoir réellement généré/testé l'exercice (ou expliquer
+  pourquoi on refuse/ajuste).
+- L'UI raffraîchit la liste d'exercices dès qu'une réponse arrive.
 
 ### Protocole de génération live
 

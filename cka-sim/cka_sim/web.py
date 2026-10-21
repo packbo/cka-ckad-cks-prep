@@ -110,6 +110,10 @@ class ExamState:
             status = prev.get("status", "pending")
             if status == "solved":
                 status = "done"
+            # SALVAGE: score > 0 can only have been earned by a passed check
+            # (old code sometimes saved 'active' with the score already set)
+            if float(prev.get("score", 0.0)) > 0 and status != "done":
+                status = "done"
             self.questions.append({
                 "scenario": s,
                 "status": status,
@@ -293,12 +297,21 @@ def load_cheatsheet() -> dict:
 
 def _apply_setup_manifest(path: str):
     """kubectl apply a setup manifest with one retry (transient API errors at
-    cluster cold-start). Returns (ok, error_text)."""
+    cluster cold-start). Comment-only / empty manifests are a no-op SUCCESS
+    (some scenarios have no cluster resources). Returns (ok, error_text)."""
+    try:
+        docs = [d for d in yaml.safe_load_all(open(path)) if d]
+    except FileNotFoundError:
+        return True, ""  # nothing to apply
+    if not docs:
+        return True, ""  # comments only — nothing to create
     cp = None
     for attempt in (1, 2):
         cp = run_shell(f"kubectl apply -f {path}", timeout=60)
         if cp.returncode == 0:
             return True, ""
+        if "no objects passed to apply" in (cp.stderr or "") + (cp.stdout or ""):
+            return True, ""  # defensive: manifest parsed empty by kubectl
         if attempt == 1:
             time.sleep(2)
     return False, ((cp.stderr or "") + (cp.stdout or "")).strip()[-500:] \
@@ -707,6 +720,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(access_info())
         elif self.path == "/api/exams":
             self._json({"exams": available_exams()})
+        elif self.path.startswith("/api/ai/chat"):
+            return self._ai_chat_get()
         elif self.path == "/api/ai/list":
             self._json({"exercises": _load_ai_bank()})
         elif self.path == "/api/ai/report":
@@ -732,6 +747,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "bad json"}, 400)
 
         p = self.path.replace("/api/", "")
+        p = self.path.replace("/api/", "")
+        if p.startswith("ai/chat"):
+            return self._ai_chat_post(p, data)
         if p.startswith("ai/"):
             return self._dispatch_ai(p, data)
         with STATE.lock:
@@ -760,6 +778,46 @@ class Handler(BaseHTTPRequestHandler):
             if p == "complete":
                 return self._json(complete_command(str(data.get("input", ""))))
         self._json({"error": "unknown endpoint"}, 404)
+
+    # --- AI teacher chat ---------------------------------------------------
+    def _ai_chat_get(self):
+        """GET /api/ai/chat[?since=<id>] — messages + pending count.
+
+        The AI agent (opencode) polls this; the browser renders the thread.
+        """
+        from cka_sim import db
+        qs = self.path.split("?", 1)
+        since = 0
+        if len(qs) > 1:
+            for kv in qs[1].split("&"):
+                if kv.startswith("since="):
+                    try:
+                        since = int(kv[6:])
+                    except ValueError:
+                        since = 0
+        msgs = db.chat_list(since)
+        pending = db.chat_pending()
+        return self._json({"messages": msgs, "pending": pending})
+
+    def _ai_chat_post(self, p, data):
+        """POST /api/ai/chat           {message}  — from the browser chat box
+        POST /api/ai/chat/reply       {text}     — from the AI agent
+        """
+        from cka_sim import db
+        if p == "ai/chat/reply":
+            text = str(data.get("text", "")).strip()
+            if not text:
+                return self._json({"error": "empty reply"}, 400)
+            handled = db.chat_mark_all_handled()
+            rid = db.chat_add("assistant", text, handled=1)
+            return self._json({"ok": True, "id": rid, "marked_handled": handled})
+        if p == "ai/chat":
+            text = str(data.get("message", "")).strip()
+            if not text:
+                return self._json({"error": "empty message"}, 400)
+            rid = db.chat_add("user", text)
+            return self._json({"ok": True, "id": rid})
+        return self._json({"error": "unknown chat endpoint"}, 404)
 
     # --- AI-assisted Learning endpoints -----------------------------------
     def _dispatch_ai(self, p: str, data: dict):
@@ -877,6 +935,7 @@ class Handler(BaseHTTPRequestHandler):
                         "hint": "check the cluster (kubectl get nodes) then click the question again",
                     }, 503)
             q["status"] = "active"
+            STATE.persist()  # insurance: 'active' state survives restarts
         from cka_sim import env as _env
         return self._json({"ok": True, "question": _env.substitute(s.question),
                            "status": q["status"]})
@@ -930,11 +989,16 @@ class Handler(BaseHTTPRequestHandler):
             r = _evaluate_once(a)  # single-pass: no settle-retry for web
             results.append({"passed": r.passed, "detail": r.detail})
         passed = bool(results) and all(r["passed"] for r in results)
-        if passed and q["status"] != "done":
-            STATE.persist()  # save to SQLite
-            pen = PENALTY.get(q["hints_used"], 0.0) if q["hints_used"] < 4 else 1.0
-            q["score"] = round(max(0.0, s.weight * (1.0 - pen)), 2)
-            q["status"] = "done"
+        if passed:
+            if q["status"] != "done":
+                pen = PENALTY.get(q["hints_used"], 0.0) if q["hints_used"] < 4 else 1.0
+                q["score"] = round(max(0.0, s.weight * (1.0 - pen)), 2)
+                q["status"] = "done"
+            # persist on EVERY pass (after score/status are set — the old
+            # code persisted before updating, so solved questions were saved
+            # as active/0 and results looked lost after import/restart);
+            # re-persisting on an already-done question also heals stale rows
+            STATE.persist()
         return self._json({
             "results": results,
             "passed": passed,
