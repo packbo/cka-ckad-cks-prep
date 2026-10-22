@@ -30,6 +30,8 @@ command -v curl   >/dev/null 2>&1 || { apt-get update -qq && as_root apt-get ins
 echo "kubectl: $(kubectl version --client 2>/dev/null | head -1 | awk '{print $3}')"
 
 # --- GitHub CLI (best effort — used to clone/PR from private repos) ---------
+#install_gh
+function install_gh() {
 if ! command -v gh >/dev/null 2>&1; then
   echo "installing GitHub CLI (gh) ..."
   (
@@ -45,6 +47,7 @@ if ! command -v gh >/dev/null 2>&1; then
 else
   echo "gh: $(gh --version 2>/dev/null | head -1)"
 fi
+}
 
 ENV_MODE=""
 if have_cluster; then
