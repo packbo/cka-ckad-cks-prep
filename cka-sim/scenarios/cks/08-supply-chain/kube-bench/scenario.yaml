@@ -1,0 +1,32 @@
+id: kube-bench
+title: "kube-bench: CIS benchmark report"
+domain: supply-chain
+weight: 3
+difficulty: medium
+time_estimate: 240
+requires: {docker: true}
+setup:
+  script:
+    - "echo 'kube-bench ready' "
+question: |
+  Run a CIS Kubernetes benchmark scan with kube-bench and keep the report:
+
+  1. Run kube-bench against the CONTROL-PLANE (it ships as a container:
+     `docker run --rm --pid=host -v /etc:/etc:ro ... aquasec/kube-bench ...`).
+  2. Save the full report to `/tmp/kube-bench.txt`.
+  3. From the report, write the number of FAILED checks of the
+     control-plane to `/tmp/kube-bench-fails.txt` (just the number).
+
+hints:
+  - level: 1
+    text: "kube-bench is a container scanning the host's /etc: docker run --rm --pid=host -v /etc:/etc:ro aquasec/kube-bench — redirects are your friends."
+  - level: 2
+    text: "docker run --rm --pid=host -v /etc:/etc:ro aquasec/kube-bench run > /tmp/kube-bench.txt 2>&1 ; then grep -c '\\[FAIL\\]' /tmp/kube-bench.txt > /tmp/kube-bench-fails.txt"
+  - level: 3
+    text: "kind nodes are not perfect CIS targets — the point is the TOOL + the report reading: count [FAIL] lines exactly as grep -c does."
+check:
+  assertions:
+    - run: "grep -q 'Summary' /tmp/kube-bench.txt && echo summary-ok"
+      contains: "summary-ok"
+    - run: "test -s /tmp/kube-bench-fails.txt && grep -Eq '^[0-9]+$' /tmp/kube-bench-fails.txt && echo numeric"
+      contains: "numeric"

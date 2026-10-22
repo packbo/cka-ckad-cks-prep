@@ -1,15 +1,20 @@
 minutes: 120
 threshold: 66
 scenarios:
-  - rbac-minimal-sa
-  - security-context
-  - sa-automount
-  - psa-namespace
-  - harden-pod
-  - network-policy
-  - netpol-default-deny
-  - ingress-tls
-  - audit-log
-  - kubeadm-token
-  - verify-binaries
-  - kubesec-scan
+- rbac-minimal-sa
+- security-context
+- sa-automount
+- psa-namespace
+- harden-pod
+- network-policy
+- netpol-default-deny
+- ingress-tls
+- audit-log
+- verify-binaries
+- kubesec-scan
+- falco-rules
+- trivy-scan
+- kube-bench
+- apparmor-profile
+- csr-approve
+- encryption-at-rest

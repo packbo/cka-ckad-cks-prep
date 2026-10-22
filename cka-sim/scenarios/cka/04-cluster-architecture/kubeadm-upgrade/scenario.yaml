@@ -1,0 +1,33 @@
+id: kubeadm-upgrade
+title: "Cluster upgrade: drain, plan, uncordon"
+domain: cluster-architecture
+weight: 4
+difficulty: hard
+time_estimate: 360
+requires: {workers: 1, docker: true}
+setup:
+  apply: setup.yaml
+question: |
+  A worker node must be prepared for a kubeadm cluster upgrade.
+
+  1. Save the upgrade plan of the CONTROL-PLANE node to `/tmp/upgrade-plan.txt`
+     (run `kubeadm upgrade plan` on the right node).
+  2. DRAIN the worker node `%WORKER%` safely (ignore daemonsets),
+     so no pods are scheduled on it.
+  3. After the "upgrade", make the node schedulable again.
+
+hints:
+  - level: 1
+    text: "Three tool families: nodeexec for the plan (kubeadm runs on the control-plane), kubectl drain for the node, kubectl uncordon at the end."
+  - level: 2
+    text: "%NODEEXEC% kubeadm upgrade plan > /tmp/upgrade-plan.txt   — then: kubectl drain %WORKER% --ignore-daemonsets --delete-emptydir-data   and finally kubectl uncordon %WORKER%"
+  - level: 3
+    text: "Piège : drain sans --ignore-daemonsets refuse de partir (DaemonSet pods). Le fichier doit être écrit DANS le nœud CP (shell du nœud), pas sur le host."
+check:
+  assertions:
+    - run: "%NODEEXEC% grep -c 'Upgrade' /tmp/upgrade-plan.txt"
+      contains: "1"
+    - run: "kubectl get node %WORKER% -o json | jq '.spec.unschedulable // false'"
+      equals: "false"
+    - run: "kubectl get node %WORKER% -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+      equals: "True"

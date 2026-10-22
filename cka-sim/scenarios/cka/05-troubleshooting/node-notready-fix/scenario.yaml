@@ -1,0 +1,33 @@
+id: node-notready-fix
+title: "Break/fix: node NotReady"
+domain: troubleshooting
+weight: 5
+difficulty: hard
+time_estimate: 360
+requires: {workers: 1, docker: true}
+setup:
+  script:
+    - "docker pause %WORKER% >/dev/null && echo paused"
+question: |
+  A node suddenly stopped responding. Since a few minutes:
+
+  - Pods on it are `Unknown` / `Terminating`
+  - Deployments cannot schedule new replicas
+
+  Find WHICH node is NotReady and WHY (`kubectl describe node` /
+  events), then repair the node — its kubelet must be reachable again
+  and the node `Ready`.
+
+hints:
+  - level: 1
+    text: "kubectl get nodes — then kubectl describe node <not-ready> : look at the Ready condition message and the node events."
+  - level: 2
+    text: "The Ready condition usually says KubeletNotReady / container runtime not responding. On this lab the node is a docker container: docker ps -a shows its real state."
+  - level: 3
+    text: "The node container is PAUSED (state: Paused in docker ps) — a frozen VM. Unfreeze it: docker unpause <node>, wait ~30s, kubectl get nodes → Ready."
+check:
+  assertions:
+    - run: "kubectl get node %WORKER% -o jsonpath='{.status.conditions[?(@.type==\"Ready\")].status}'"
+      equals: "True"
+    - run: "docker inspect -f '{{.State.Status}}' %WORKER%"
+      equals: "running"

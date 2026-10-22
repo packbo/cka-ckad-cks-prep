@@ -295,6 +295,20 @@ def load_cheatsheet() -> dict:
         return {"research_methods": []}
 
 
+def _run_setup_scripts(scenario) -> str:
+    """Run break/fix setup scripts (setup.script:) with %PLACEHOLDER%
+    substitution. Returns error text ('' = ok)."""
+    from cka_sim import env as _env
+    if not scenario.setup_script:
+        return ""
+    for n, cmd in enumerate(scenario.setup_script, 1):
+        cp = run_shell(_env.substitute(cmd), timeout=180)
+        if cp.returncode != 0:
+            return (f"setup script step {n}/{len(scenario.setup_script)} failed: "
+                    + ((cp.stderr or "") + (cp.stdout or "")).strip()[-400:])
+    return ""
+
+
 def _apply_setup_manifest(path: str):
     """kubectl apply a setup manifest with one retry (transient API errors at
     cluster cold-start). Comment-only / empty manifests are a no-op SUCCESS
@@ -934,6 +948,9 @@ class Handler(BaseHTTPRequestHandler):
                         "detail": err,
                         "hint": "check the cluster (kubectl get nodes) then click the question again",
                     }, 503)
+            err = _run_setup_scripts(s)
+            if err:
+                return self._json({"error": "setup failed", "detail": err}, 503)
             q["status"] = "active"
             STATE.persist()  # insurance: 'active' state survives restarts
         from cka_sim import env as _env

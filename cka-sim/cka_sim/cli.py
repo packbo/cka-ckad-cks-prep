@@ -339,6 +339,32 @@ def cmd_web(args):
     ctx = _sh("kubectl config current-context")
     is_kind = ctx.startswith("kind-") or kind_installed() and _sh("kind get clusters 2>/dev/null | grep -q . && echo yes") == "yes"
 
+    # DEFAULT: local server (kind AND preinstalled clusters). The server runs
+    # where docker/node-exec live, so cluster-admin scenarios (etcd, kubeadm,
+    # trivy, apparmor...) are NOT filtered out like they are in-pod.
+    if not getattr(args, "pod", False):
+        ui.info("running web server locally (all scenarios available incl. node/docker ones) ...")
+        web_port = os.environ.get("CKA_SIM_WEB_PORT", "8080")
+        ui.banner(f"EXAM WEB UI  |  http://localhost:{web_port}")
+        ui.info(f"Killercoda : open the 'Traffic Port' tab and enter port {web_port}.")
+        ui.info("Press Ctrl+C to stop.")
+
+        env_vars = dict(os.environ)
+        cert = paths.active_cert()
+        env_vars["CKA_SIM_CERT"] = cert
+        env_vars["CKA_SIM_WEB_PORT"] = web_port
+        env_vars["PYTHONPATH"] = root
+        try:
+            proc = subprocess.Popen(
+                [sys.executable, "-m", "cka_sim.web"],
+                cwd=root, env=env_vars,
+            )
+            proc.wait()
+        except KeyboardInterrupt:
+            proc.terminate()
+            ui.ok("web server stopped")
+        return
+
     if is_kind:
         # ── kind path: build image → load into kind → deploy as pod ──
         if subprocess.run(["bash", "-c", "command -v docker"], capture_output=True).returncode != 0:
@@ -452,7 +478,9 @@ def build_parser():
     sub.add_parser("down", help="delete the kind cluster").set_defaults(func=cmd_down)
     sub.add_parser("reset", help="reset cluster state between questions").set_defaults(func=cmd_reset)
     sub.add_parser("status", help="show cluster/tooling status").set_defaults(func=cmd_status)
-    sub.add_parser("web", help="build+deploy the web exam UI and port-forward it").set_defaults(func=cmd_web)
+    sp = sub.add_parser("web", help="run the web exam UI (local server by default)")
+    sp.add_argument("--pod", action="store_true", help="deploy in-cluster pod (NodePort 30999) instead of a local server")
+    sp.set_defaults(func=cmd_web)
     sub.add_parser("webstop", help="stop the web UI port-forward").set_defaults(func=cmd_webstop)
     return p
 

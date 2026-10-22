@@ -1,9 +1,17 @@
 minutes: 120
-threshold: 66
+threshold: 67
 scenarios:
+  # Full CKS mix: hardening + external tools (trivy, apparmor, kube-bench,
+  # falco, encryption-at-rest) + networking + audit
   - rbac-minimal-sa
   - harden-pod
   - ingress-tls
   - psa-namespace
   - security-context
   - sa-automount
+  - trivy-scan
+  - encryption-at-rest
+  - apparmor-profile
+  - kube-bench
+  - csr-approve
+  - netpol-default-deny

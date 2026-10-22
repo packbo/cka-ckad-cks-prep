@@ -1,0 +1,31 @@
+id: trivy-scan
+title: "Trivy: scan images, deploy the safe one"
+domain: supply-chain
+weight: 4
+difficulty: medium
+time_estimate: 300
+requires: {docker: true}
+setup:
+  apply: setup.yaml
+question: |
+  Vulnerability scan before deployment (Trivy):
+
+  1. Scan `nginx:1.21` and `nginx:mainline-alpine` with Trivy and save the
+     report of the VULNERABLE one to `/tmp/trivy.txt`
+     (e.g. `docker run --rm aquasec/trivy image ...`).
+  2. Deploy `secure-app` (ns `cks`, image nginx, 1 replica) using ONLY
+     the image with **no CRITICAL vulnerabilities**.
+
+hints:
+  - level: 1
+    text: "Trivy ships as a container: docker run --rm aquasec/trivy image nginx:1.21 — look for the CRITICAL count in the summary table."
+  - level: 2
+    text: "docker run --rm aquasec/trivy image --severity CRITICAL nginx:1.21 > /tmp/trivy.txt ; do the same for nginx:mainline-alpine and compare — deploy the clean one."
+  - level: 3
+    text: "Piège : report file must contain the scan output of the VULNERABLE image (CRITICAL lines). The Deployment must run nginx:mainline-alpine — not 1.21."
+check:
+  assertions:
+    - run: "grep -ci 'CRITICAL' /tmp/trivy.txt"
+      contains: "1"
+    - run: "kubectl get deploy secure-app -n cks -o jsonpath='{.spec.template.spec.containers[0].image}'"
+      equals: "nginx:mainline-alpine"

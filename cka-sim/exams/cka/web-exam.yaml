@@ -1,19 +1,22 @@
 minutes: 120
 threshold: 66
 scenarios:
+  # killer.sh-grade mix: app core + cluster-admin + break/fix
   - create-deploy
   - expose-nodeport
   - pvc-mount
   - role-binding
   - fix-image-pull
-  - service-no-endpoints
   - network-policy
-  - extract-image-deploy
-  - rollout-rollback
-  - blue-green-deploy
-  - canary-deploy
+  - etcd-backup
+  - cert-expiry-check
+  - drain-uncordon
+  - kubeadm-upgrade
+  - user-csr-kubeconfig
+  - wrong-cluster-config
   - fix-crashloop
-  - headless-service
   - storage-class
-  - fix-pending-pvc
-  - daemonset-node-labels
+  - rollout-rollback
+  - ingress-path
+  - headless-service
+  - node-notready-fix

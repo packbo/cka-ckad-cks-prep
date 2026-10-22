@@ -1,0 +1,39 @@
+id: encryption-at-rest
+title: "Encrypt Secrets at rest (EncryptionConfiguration)"
+domain: security
+weight: 5
+difficulty: hard
+time_estimate: 420
+requires: {docker: true}
+setup:
+  apply: setup.yaml
+question: |
+  Secrets stored in etcd are plaintext by default. Configure
+  ENCRYPTION AT REST on the API server:
+
+  1. Generate a 32-byte random key, base64 it.
+  2. Create `/etc/kubernetes/encryption.yaml` on the CONTROL-PLANE node:
+     an `EncryptionConfiguration` with provider `aescbc` and your key.
+  3. Edit the kube-apiserver STATIC POD manifest on that node to add:
+     `--encryption-provider-config=/etc/kubernetes/encryption.yaml`
+     (plus the volume/volumeMount) — the apiserver restarts.
+  4. Create Secret `topsecret` (ns `cks`) and prove the apiserver is
+     healthy.
+
+hints:
+  - level: 1
+    text: "kubernetes.io/tasks/administer-cluster/encrypt-data : the config is a yaml with apiServer... aescbc; the apiserver needs the flag --encryption-provider-config + the file mounted via the static pod."
+  - level: 2
+    text: "head -c 32 /dev/urandom | base64 → key (field `secret:` NOT `value:`!). On the CP node: %NODEEXEC% sh -c 'cat > /etc/kubernetes/encryption.yaml'. Then edit /etc/kubernetes/manifests/kube-apiserver.yaml: add the command flag + volumeMount (mountPath /etc/kubernetes/encryption.yaml, subPath encryption.yaml, readOnly) + volume hostPath /etc/kubernetes type DIRECTORY."
+  - level: 3
+    text: "2 pièges classiques : (1) le champ de la clé aescbc est `secret:` ; (2) le volume hostPath doit être le RÉPERTOIRE /etc/kubernetes (type Directory) avec subPath encryption.yaml — un hostPath File + subPath donne l'erreur 'failed to prepare subPath'. Le static pod redémarre tout seul — attends Ready."
+check:
+  assertions:
+    - run: "%NODEEXEC% grep -c 'aescbc' /etc/kubernetes/encryption.yaml"
+      contains: "1"
+    - run: "%NODEEXEC% grep -c 'encryption-provider-config' /etc/kubernetes/manifests/kube-apiserver.yaml"
+      contains: "1"
+    - run: "kubectl -n kube-system get pods -l component=kube-apiserver -o jsonpath='{.items[0].status.conditions[?(@.type==\"Ready\")].status}'"
+      equals: "True"
+    - run: "kubectl -n cks get secret topsecret -o jsonpath='{.data.x}'"
+      contains: "MQ=="

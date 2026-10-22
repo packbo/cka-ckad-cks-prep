@@ -44,13 +44,13 @@ bash install.sh
 
 `install.sh` détecte l'absence de cluster, installe **kind** et crée un cluster
 **1 control-plane + 2 workers** (docker requis), puis démarre l'UI web en
-arrière-plan (**NodePort 30999**) et affiche l'URL à ouvrir :
+arrière-plan (**serveur local :8080**) et affiche l'URL à ouvrir :
 
 ```
-🎓  WEB EXAM UI READY — NodePort 30999
-➜  on this host     :  http://172.18.0.2:30999
-➜  from your browser:  http://<public-ip>:30999   (open the firewall)
-    fallback          :  kubectl port-forward svc/cka-exam 8080:80
+🎓  WEB EXAM UI READY — local server on :8080
+➜  on this host     :  http://localhost:8080
+➜  from your browser:  http://<public-ip>:8080   (open the firewall)
+    (in-cluster pod alternative: ./run.sh web --pod → NodePort 30999)
 ```
 
 ### Option C — Cluster existant (GKE / EKS / kubeadm…)
@@ -245,7 +245,7 @@ Voir `killercoda/README.md`. Le point d'entrée est `killercoda/bootstrap.sh`
 |---|---|
 | Terminal web rouge « reconnecting » | le serveur web est down → `./run.sh web` (ou log `/tmp/cka-sim-web.log`) |
 | Page web inaccessible (Killercoda) | Traffic Port ≠ 8080 ? Vérifier l'onglet **Traffic Port**, port **8080** |
-| NodePort 30999 inaccessible (kind) | firewall / `kubectl port-forward svc/cka-exam 8080:80` |
+| Port 8080 inaccessible (distante) | firewall / tunnel `ssh -L 8080:localhost:8080` / `./run.sh web --pod` (NodePort 30999) |
 | `kubectl top` vide | metrics-server pas prêt : `kubectl -n kube-system rollout status deploy/metrics-server` |
 | Port 8080 déjà pris | `CKA_SIM_WEB_PORT=9090 ./run.sh web` + Traffic Port 9090 |
 | Résultats effacés après reinstall | normaux si `db/reset` ; sinon la SQLite est dans `cka-sim/data/exam_state.db` |

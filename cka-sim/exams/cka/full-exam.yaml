@@ -1,41 +1,64 @@
 minutes: 120
 threshold: 66
 scenarios:
-  - create-deploy
-  - expose-nodeport
-  - pvc-mount
-  - role-binding
-  - fix-image-pull
-  - service-no-endpoints
-  - network-policy
-  - extract-image-deploy
-  - etcd-backup
-  - cronjob-every-2min
-  - env-configmap
-  - rolling-strategy
-  - ingress-path
-  - netpol-default-deny
-  - taint-worker
-  - security-context
-  - rollout-rollback
-  - blue-green-deploy
-  - canary-deploy
-  - job-completions
-  - fix-crashloop
-  - node-selector-schedule
-  - daemonset-node-labels
-  - node-affinity
-  - headless-service
-  - storage-class
-  - fix-pending-pvc
-  - static-pod
-  - kubeadm-token
-  - kustomize-apply
-  - statefulset-create
-  - hpa-autoscale
-  - resource-quota
-  - image-pull-secret
-  - dns-troubleshoot
-  - cert-renew
-  - full-app-deploy
-  - crd-install
+- create-deploy
+- expose-nodeport
+- pvc-mount
+- role-binding
+- fix-image-pull
+- service-no-endpoints
+- network-policy
+- extract-image-deploy
+- etcd-backup
+- cronjob-every-2min
+- env-configmap
+- rolling-strategy
+- ingress-path
+- netpol-default-deny
+- taint-worker
+- security-context
+- rollout-rollback
+- blue-green-deploy
+- canary-deploy
+- job-completions
+- fix-crashloop
+- node-selector-schedule
+- daemonset-node-labels
+- node-affinity
+- headless-service
+- storage-class
+- fix-pending-pvc
+- static-pod
+- kubeadm-token
+- kustomize-apply
+- statefulset-create
+- hpa-autoscale
+- resource-quota
+- image-pull-secret
+- dns-troubleshoot
+- cert-renew
+- full-app-deploy
+- crd-install
+- first-pod
+- delete-label
+- inspect-pod
+- explain-fields
+- user-csr-kubeconfig
+- node-backup
+- kubeadm-upgrade
+- cert-expiry-check
+- etcd-restore
+- drain-uncordon
+- probe-readiness
+- resources-limits
+- decode-secret
+- init-container
+- sidecar-logging
+- secret-volume
+- pvc-rwo
+- node-notready-fix
+- fix-scheduler
+- wrong-cluster-config
+- fix-apiserver
+- sa-automount
+- psa-namespace

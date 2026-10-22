@@ -1,0 +1,36 @@
+id: apparmor-profile
+title: "AppArmor: write and validate a container profile"
+domain: security
+weight: 4
+difficulty: hard
+time_estimate: 330
+requires: {workers: 1, docker: true}
+setup:
+  script:
+    - "docker exec %WORKER% sh -c 'apt-get update -qq >/dev/null 2>&1; apt-get install -y -qq apparmor >/dev/null 2>&1; which apparmor_parser' && echo apparmor-ready"
+question: |
+  Constrain a container with AppArmor:
+
+  1. Write an AppArmor profile `cks-nginx` to `/etc/apparmor.d/cks-nginx`
+     on the worker node: it must DENY `write` to `/etc/**`, everything
+     else allowed (base abstractions).
+  2. Validate its syntax with `apparmor_parser -Q` on that node.
+  3. Create Pod `armored` (ns `cks`, image nginx, container name `nginx`)
+     annotated to run under the `localhost/cks-nginx` profile
+     (the annotation key is container.apparmor.security.beta.kubernetes.io/nginx).
+
+hints:
+  - level: 1
+    text: "AppArmor profiles live on the NODE (/etc/apparmor.d/). Pods reference them with the annotation container.apparmor.security.beta.kubernetes.io/<container>: localhost/<profile>."
+  - level: 2
+    text: "%WORKEREXEC% sh -c 'cat > /etc/apparmor.d/cks-nginx' <<'EOF' … EOF  (profile: #include <tunables/global> / profile cks-nginx flags=(attach_disconnected) { #include <abstractions/base> deny /etc/** w, })"
+  - level: 3
+    text: "Valide la syntaxe sans charger (kernel non dispo dans un conteneur) : %WORKEREXEC% apparmor_parser -Q /etc/apparmor.d/cks-nginx. L'annotation va sur les METADATA du pod (pas dans spec.containers)."
+check:
+  assertions:
+    - run: "%WORKEREXEC% grep -c 'deny /etc/\\*\\* w,' /etc/apparmor.d/cks-nginx"
+      contains: "1"
+    - run: "%WORKEREXEC% sh -c 'apparmor_parser -Q /etc/apparmor.d/cks-nginx && echo syntax-ok'"
+      contains: "syntax-ok"
+    - run: "kubectl get pod armored -n cks -o jsonpath='{.metadata.annotations.container\\.apparmor\\.security\\.beta\\.kubernetes\\.io/nginx}'"
+      contains: "localhost/cks-nginx"

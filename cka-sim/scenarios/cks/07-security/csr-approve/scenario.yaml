@@ -1,0 +1,30 @@
+id: csr-approve
+title: "Approve a node CertificateSigningRequest"
+domain: security
+weight: 3
+difficulty: medium
+time_estimate: 210
+setup:
+  script:
+    - "openssl genrsa -out /tmp/node-agent.key 2048 >/dev/null 2>&1 && openssl req -new -key /tmp/node-agent.key -subj '/CN=node-agent/O=system:nodes' -out /tmp/node-agent.csr >/dev/null 2>&1 && kubectl apply -f - <<EOF\napiVersion: certificates.k8s.io/v1\nkind: CertificateSigningRequest\nmetadata:\n  name: node-agent\nspec:\n  request: $(base64 -w0 /tmp/node-agent.csr)\n  signerName: kubernetes.io/kube-apiserver-client\n  usages: [client auth]\nEOF"
+question: |
+  A new node agent is waiting for its certificate:
+
+  1. Inspect the PENDING CertificateSigningRequest `node-agent`
+     (requester, usages, signer).
+  2. Approve it.
+  3. Export the SIGNED certificate to `/tmp/node-agent.crt` (PEM).
+
+hints:
+  - level: 1
+    text: "kubectl get csr, kubectl describe csr node-agent — then the certificate subcommands of kubectl."
+  - level: 2
+    text: "kubectl certificate approve node-agent — the signed cert is base64 in .status.certificate of the CSR."
+  - level: 3
+    text: "kubectl get csr node-agent -o jsonpath='{.status.certificate}' | base64 -d > /tmp/node-agent.crt — verify with openssl x509 -in /tmp/node-agent.crt -noout -subject."
+check:
+  assertions:
+    - run: "kubectl get csr node-agent -o jsonpath='{.status.conditions[0].type}'"
+      equals: "Approved"
+    - run: "openssl x509 -in /tmp/node-agent.crt -noout -subject 2>/dev/null | grep -c 'node-agent'"
+      contains: "1"

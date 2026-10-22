@@ -195,31 +195,24 @@ launch_web_bg() {
 
 echo "=== Web exam UI ==="
 
-# ── which serving mode? ─────────────────────────────────────────────────────
-#  kind cluster OR fresh install  -> web as a POD in the cluster (NodePort)
-#  preinstalled/managed cluster   -> local python web server on :8080
-WEB_MODE="nodeport"
-if [ "$ENV_MODE" = "existing" ] && ! is_kind_cluster; then
-  WEB_MODE="local"
+# Local web server on :8080 — works for preinstalled clusters AND kind:
+# the server runs where docker/node-exec live, so cluster-admin scenarios
+# (etcd, kubeadm, trivy, apparmor…) are all available.
+if http_ok "http://localhost:${WEB_PORT}/api/state"; then
+  echo "web UI already listening on :${WEB_PORT}"
+else
+  launch_web_bg
+  echo -n "waiting for the web server on :${WEB_PORT} "
+  for _ in $(seq 1 30); do
+    http_ok "http://localhost:${WEB_PORT}/api/state" && break
+    echo -n "."; sleep 2
+  done
+  echo ""
 fi
 
-if [ "$WEB_MODE" = "local" ]; then
-  # ── preinstalled cluster (Killercoda / managed): local web server :8080 ──
-  if http_ok "http://localhost:${WEB_PORT}/api/state"; then
-    echo "web UI already listening on :${WEB_PORT}"
-  else
-    launch_web_bg
-    echo -n "waiting for the web server on :${WEB_PORT} "
-    for _ in $(seq 1 30); do
-      http_ok "http://localhost:${WEB_PORT}/api/state" && break
-      echo -n "."; sleep 2
-    done
-    echo ""
-  fi
-
-  if http_ok "http://localhost:${WEB_PORT}/api/state"; then
-    if is_killercoda_like; then
-      cat <<EOF | tee "$MARKER"
+if http_ok "http://localhost:${WEB_PORT}/api/state"; then
+  if is_killercoda_like; then
+    cat <<EOF2 | tee "$MARKER"
 
 ───────────────────────────────────────────────────────────────
  🎓  WEB EXAM UI READY — running in the background on :${WEB_PORT}
@@ -227,54 +220,21 @@ if [ "$WEB_MODE" = "local" ]; then
     and enter the port:   ${WEB_PORT}
     The exam page (questions left, real terminal right) opens.
 ───────────────────────────────────────────────────────────────
-EOF
-    else
-      cat <<EOF | tee "$MARKER"
-
- 🎓 WEB EXAM UI READY — http://localhost:${WEB_PORT}
- (remote host? ssh -L 8080:localhost:8080 <this-host>)
-EOF
-    fi
+EOF2
   else
-    echo "⚠ web server did not come up — inspect $WEB_LOG"
-    echo "(start manually with: ./run.sh web)"
-  fi
-
-else
-  # ── kind / fresh: web deployed in-cluster (NodePort) ──
-  NP="$(nodeport_of_service || true)"
-  IP="$(first_node_ip || true)"
-  if [ -n "$NP" ] && [ -n "$IP" ] && http_ok "http://${IP}:${NP}/api/state"; then
-    echo "web UI already deployed (NodePort ${NP})"
-  else
-    launch_web_bg
-    echo -n "building + deploying the web UI (docker build can take 1-3 min) "
-    for _ in $(seq 1 180); do
-      NP="$(nodeport_of_service || true)"
-      IP="$(first_node_ip || true)"
-      if [ -n "$NP" ] && [ -n "$IP" ] && http_ok "http://${IP}:${NP}/api/state"; then break; fi
-      echo -n "."; sleep 3
-    done
-    echo ""
-  fi
-
-  NP="$(nodeport_of_service || true)"
-  IP="$(first_node_ip || true)"
-  if [ -n "$NP" ] && http_ok "http://${IP}:${NP}/api/state"; then
     PUB_IP="$(curl -4 -sf --max-time 3 ifconfig.me 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')"
-    cat <<EOF | tee "$MARKER"
+    cat <<EOF2 | tee "$MARKER"
 
 ───────────────────────────────────────────────────────────────
- 🎓  WEB EXAM UI READY — NodePort ${NP}
- ➜  on this host     :  http://${IP}:${NP}
- ➜  from your browser:  http://${PUB_IP:-<public-ip>}:${NP}   (open the firewall)
-    fallback          :  kubectl port-forward svc/cka-exam 8080:80
-                        -> http://localhost:8080
+ 🎓  WEB EXAM UI READY — local server on :${WEB_PORT}
+ ➜  on this host     :  http://localhost:${WEB_PORT}
+ ➜  from your browser:  http://${PUB_IP:-<ip>}:${WEB_PORT}   (open the firewall)
+    (in-cluster pod alternative: ./run.sh web --pod → NodePort 30999)
 ───────────────────────────────────────────────────────────────
-EOF
-  else
-    echo "⚠ web deployment not ready — inspect $WEB_LOG  (or run: ./run.sh web)"
+EOF2
   fi
+else
+  echo "⚠ web server did not come up — inspect $WEB_LOG (or run: ./run.sh web)"
 fi
 
 echo ""

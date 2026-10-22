@@ -42,8 +42,10 @@ bash install.sh          # kind + deps (venv only if python is externally-manage
 ## Web mode (Killercoda-style: questions left, real terminal right)
 
 ```bash
-./run.sh web        # kind cluster: build+deploy in-cluster (NodePort 30999)
-                    # existing cluster (Killercoda/managed): local server on :8080
+./run.sh web            # LOCAL server on :8080 (default) — ALL scenarios
+                        # available (docker/node-exec: etcd, kubeadm, trivy…)
+./run.sh web --pod      # alternative: deploy in-cluster (NodePort 30999)
+                        # NB: node-exec scenarios are filtered in-pod
 ```
 
 Split-pane page like the real Killercoda player: **questions + buttons on the
@@ -62,11 +64,9 @@ Left-panel tabs:
 
 How to open:
 
-- **Killercoda (preinstalled cluster)**: web runs locally on **:8080** — open
-  the *Traffic Port* tab (right of Terminal) and enter **8080**
-- **kind**: `http://<node-ip>:30999` (NodePort 30999, printed by `./run.sh web`
-  and by `bash install.sh` at the end; also shown in the header chip)
-- **Fallback**: `kubectl port-forward svc/cka-exam 8080:80` → http://localhost:8080 (`./run.sh webstop`)
+- **Default (local server)**: http://localhost:8080 — sur Killercoda, ouvrir
+  l'onglet *Traffic Port* et saisir **8080** ; à distance `ssh -L 8080:localhost:8080`
+- **--pod**: `http://<node-ip>:30999` (NodePort), puis `kubectl port-forward svc/cka-exam 8080:80`
 
 On kind the exam server runs **in-cluster** (pod `cka-exam`, ServiceAccount
 with broad RBAC — local training cluster only). Web exam = `exams/web-exam.yaml`

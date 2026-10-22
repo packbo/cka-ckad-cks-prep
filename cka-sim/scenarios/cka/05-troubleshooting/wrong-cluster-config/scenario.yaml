@@ -1,0 +1,31 @@
+id: wrong-cluster-config
+title: "Break/fix: kubeconfig points to the wrong API port"
+domain: troubleshooting
+weight: 3
+difficulty: medium
+time_estimate: 240
+setup:
+  script:
+    - "kubectl config view --flatten --minify > /tmp/broken.kubeconfig && sed -Ei 's#(server: https://[^:]+):[0-9]+#\\1:6444#' /tmp/broken.kubeconfig && echo broken-cfg-ok"
+question: |
+  Your colleague's kubectl is broken. Reproduce and diagnose:
+
+      kubectl --kubeconfig /tmp/broken.kubeconfig get nodes
+
+  returns `Connection refused`. Find the cause in the kubeconfig file,
+  repair it (the file must keep working afterwards), and prove it by
+  listing nodes through it.
+
+hints:
+  - level: 1
+    text: "Read the error carefully: 'connection refused' = the client reaches an IP but nothing listens on that PORT — compare with a working kubeconfig (kubectl config view)."
+  - level: 2
+    text: "grep -n 'server:' /tmp/broken.kubeconfig — compare the port with kubectl config view --minify | grep server. Fix the file with sed/vi."
+  - level: 3
+    text: "Port 6444 is wrong (nothing listens there): restore the port from the CURRENT context (kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')."
+check:
+  assertions:
+    - run: "grep -c ':6444' /tmp/broken.kubeconfig"
+      equals: "0"
+    - run: "kubectl --kubeconfig /tmp/broken.kubeconfig get nodes -o jsonpath='{range .items[*]}{.status.conditions[?(@.type==\"Ready\")].status}{\" \"}{end}'"
+      contains: "True"

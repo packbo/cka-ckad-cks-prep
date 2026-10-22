@@ -1,0 +1,38 @@
+id: user-csr-kubeconfig
+title: "Create a user: CSR + kubeconfig + restricted access"
+domain: rbac
+weight: 5
+difficulty: hard
+time_estimate: 420
+setup:
+  apply: setup.yaml
+question: |
+  Onboard a new user `anna` (classic exam flow):
+
+  1. Generate a client key+CSR for CN `anna`, create a CertificateSigningRequest
+     named `anna-csr` (group `system:authenticated`, usages: client auth).
+  2. Approve it and retrieve the signed certificate to `/tmp/anna.crt`.
+  3. Build a kubeconfig at `/tmp/anna.kubeconfig` (cluster + user anna with
+     the client cert/key).
+  4. RESTRICT her access: she may ONLY `get`/`list` pods in namespace
+     `default` — nothing else anywhere.
+
+hints:
+  - level: 1
+    text: "API flow: openssl req -newkey → encode CSR in base64 → kubectl apply a CSR yaml → kubectl certificate approve → extract .status.certificate."
+  - level: 2
+    text: "openssl genrsa -out /tmp/anna.key 2048; openssl req -new -key /tmp/anna.key -subj '/CN=anna/O=dev' -out /tmp/anna.csr ; base64 -w0 /tmp/anna.csr → spec.request. kubeconfig: extraire le CA (kubectl config view --minify --flatten -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > /tmp/ca.crt) puis kubectl config set-cluster/set-credentials --embed-certs dans /tmp/anna.kubeconfig."
+  - level: 3
+    text: "RBAC: Role (pods: get,list) in ns default + RoleBinding to User anna. Verify BOTH directions: kubectl --kubeconfig /tmp/anna.kubeconfig get pods -n default works, and ... delete pod -n default is Forbidden."
+  - level: solution
+    text: "CSR yaml (request: base64, usages [digital signature, key encipherment, client auth]) → approve anna-csr → kubectl get csr anna-csr -o jsonpath='{.status.certificate}' | base64 -d > /tmp/anna.crt → kubeconfig with client-certificate-data/client-key-data → Role+RoleBinding (pods get list, ns default)."
+check:
+  assertions:
+    - run: "kubectl get csr anna-csr -o jsonpath='{.status.conditions[0].type}'"
+      equals: "Approved"
+    - run: "kubectl --kubeconfig=/tmp/anna.kubeconfig get pods -n default -o jsonpath='{.items[*].metadata.name}'"
+      contains: "web"
+    - run: "kubectl --kubeconfig=/tmp/anna.kubeconfig delete pod web -n default 2>&1 | grep -c Forbidden"
+      contains: "1"
+    - run: "kubectl auth can-i create deploy -n default --as anna"
+      equals: "no"

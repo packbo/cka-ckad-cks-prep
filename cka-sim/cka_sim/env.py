@@ -72,18 +72,20 @@ def placeholders(env: dict = None) -> dict:
     env = env or detect()
     if env["exec_style"] == "docker":
         nodeexec = f"docker exec {env['cp']}"
+        workerexec = f"docker exec {env['worker']}" if env["worker"] else ""
         cpcp, cpdest = "docker cp", f"{env['cp']}:"
         auditlog = f"docker logs {env['cp']} 2>&1"
     elif env["exec_style"] == "direct":
-        nodeexec, cpcp, cpdest = "", "cp", ""
+        nodeexec, workerexec, cpcp, cpdest = "", "", "cp", ""
         auditlog = "journalctl -u kube-apiserver --no-pager -n 300 2>/dev/null || cat /var/log/kube-apiserver/audit.log 2>/dev/null"
     else:
-        nodeexec, cpcp, cpdest, auditlog = "", "", "", ""
+        nodeexec, workerexec, cpcp, cpdest, auditlog = "", "", "", "", ""
     return {
         "%CP%": env["cp"],
         "%WORKER%": env["worker"],
         "%WORKER2%": env["worker2"],
         "%NODEEXEC%": nodeexec,
+        "%WORKEREXEC%": workerexec,
         "%CPCP%": cpcp,
         "%CPDEST%": cpdest,
         "%AUDITLOG%": auditlog,

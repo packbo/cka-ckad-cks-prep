@@ -1,0 +1,30 @@
+id: falco-rules
+title: "Falco: write a runtime security rule"
+domain: monitoring
+weight: 3
+difficulty: medium
+time_estimate: 210
+question: |
+  Falco detects suspicious runtime behaviour with rules. Write a custom
+  rule file `/tmp/falco-custom.yaml` containing:
+
+  1. A macro or list `shell_binaries` covering `bash` (at least).
+  2. A rule `ShellInContainer` (priority WARNING) firing when a shell
+     is spawned inside a container, with an output message that includes
+     the container name (`%container.name%`).
+
+hints:
+  - level: 1
+    text: "Falco rules: lists → macros → rules (condition + output + priority). Docs: falco.org/docs/rules — custom rules load from files like /etc/falco/falco_rules.local.yaml."
+  - level: 2
+    text: "- list: shell_binaries: [bash, sh]  |  - macro: shell_binaries: condition: proc.name in (shell_binaries)  |  rule with condition: spawned_process and shell_binaries and container.name != host"
+  - level: 3
+    text: "The output MUST contain %container.name% : output: \"Shell spawned in container (user=%user.name container=%container.name proc=%proc.name)\" — priority: WARNING."
+check:
+  assertions:
+    - run: "grep -c 'ShellInContainer' /tmp/falco-custom.yaml"
+      contains: "1"
+    - run: "grep -c 'container.name' /tmp/falco-custom.yaml"
+      contains: "1"
+    - run: "grep -ci 'WARNING' /tmp/falco-custom.yaml"
+      contains: "1"
